@@ -762,20 +762,20 @@ function AdminPanel({ user, onClose }) {
   async function deletePost(id) {
     await supabase.from("posts").delete().eq("id", id);
     setPosts(p => p.filter(x => x.id !== id));
-    loadAll();
+    
   }
 
   async function deleteProduct(id) {
     await supabase.from("products").delete().eq("id", id);
     setProducts(p => p.filter(x => x.id !== id));
-    loadAll();
+
   }
 
   async function createEvent() {
     if (!newEvent.title || !newEvent.date) return;
     await supabase.from("events").insert({ ...newEvent, spots: parseInt(newEvent.spots) || 0 });
     setNewEvent({ title: "", date: "", time: "", category: "", spots: "", emoji: "🎉" });
-    loadAll();
+    
   }
 
   async function deleteEvent(id) {
