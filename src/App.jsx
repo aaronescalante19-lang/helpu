@@ -509,51 +509,63 @@ function MarketView({ user, onToast }) {
 }
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
-const EVENTS_STATIC = [
-  { id:1, title:"Tour Gastronómico Lima Centro", date:"Sáb 31 Mayo", time:"10:00 AM", category:"Gastronomía", spots:18, emoji:"🍜", bg:"linear-gradient(135deg,#FF6B6B,#ffa500)" },
-  { id:2, title:"Tarde de Museos - Larco & MALI", date:"Dom 1 Jun", time:"2:00 PM", category:"Cultura", spots:25, emoji:"🎨", bg:"linear-gradient(135deg,#4ECDC4,#44a8ff)" },
-  { id:3, title:"Junta en el Parque Kennedy", date:"Vie 6 Jun", time:"5:30 PM", category:"Social", spots:50, emoji:"🌿", bg:"linear-gradient(135deg,#A8E6CF,#4ECDC4)" },
-  { id:4, title:"Noche de Juegos de Mesa", date:"Sáb 7 Jun", time:"7:00 PM", category:"Entretenimiento", spots:16, emoji:"🎲", bg:"linear-gradient(135deg,#A78BFA,#818cf8)" },
-  { id:5, title:"Caminata Cerro San Cristóbal", date:"Dom 8 Jun", time:"8:00 AM", category:"Deporte", spots:30, emoji:"⛰️", bg:"linear-gradient(135deg,#FFB347,#FF6B6B)" },
-  { id:6, title:"Feria de Emprendimientos", date:"Lun 9 Jun", time:"11:00 AM", category:"Negocios", spots:100, emoji:"💼", bg:"linear-gradient(135deg,#5C7CFA,#A78BFA)" },
-];
-
 function EventsView({ onToast }) {
+  const [events, setEvents] = useState([]);
   const [attending, setAttending] = useState({});
+  const [loading, setLoading] = useState(true);
+  const bgs = ["linear-gradient(135deg,#FF6B6B,#ffa500)","linear-gradient(135deg,#4ECDC4,#44a8ff)","linear-gradient(135deg,#A8E6CF,#4ECDC4)","linear-gradient(135deg,#A78BFA,#818cf8)","linear-gradient(135deg,#FFB347,#FF6B6B)","linear-gradient(135deg,#5C7CFA,#A78BFA)"];
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("events").select("*").order("created_at", { ascending: false });
+      if (data) setEvents(data);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
   return (
     <div style={{ flex:1 }}>
       <div className="page-header">
         <div className="section-title">Actividades y Eventos</div>
         <div className="section-sub">Conecta con compañeros y descubre Lima</div>
       </div>
-      <div className="events-grid">
-        {EVENTS_STATIC.map(ev => (
-          <div className="event-card" key={ev.id}>
-            <div className="event-header" style={{ background:ev.bg }}>
-              <span style={{ fontSize:"3rem" }}>{ev.emoji}</span>
-              <span className="event-cat">{ev.category}</span>
-            </div>
-            <div className="event-body">
-              <div className="event-title">{ev.title}</div>
-              <div className="event-meta">
-                <span className="event-meta-item">📅 {ev.date}</span>
-                <span className="event-meta-item">🕐 {ev.time}</span>
-              </div>
-              <div style={{ fontSize:"0.77rem", color:"var(--purple)", background:"rgba(167,139,250,0.1)", borderRadius:20, padding:"3px 10px", marginBottom:12, display:"inline-block" }}>
-                👥 {ev.spots} cupos
-              </div>
-              <button className={`attend-btn${attending[ev.id]?" attending":""}`}
-                onClick={() => { setAttending(a => ({...a,[ev.id]:!a[ev.id]})); onToast(attending[ev.id]?"❌ Cancelaste tu asistencia":"✅ ¡Te apuntaste!"); }}>
-                {attending[ev.id] ? "✅ ¡Asistirás!" : "Asistir"}
-              </button>
-            </div>
+      {loading ? <div className="loading">Cargando eventos...</div> :
+        events.length === 0 ? (
+          <div className="empty-feed">
+            <div className="empty-feed-icon">🎉</div>
+            <div>No hay eventos aún. ¡El admin creará pronto!</div>
           </div>
-        ))}
-      </div>
+        ) : (
+          <div className="events-grid">
+            {events.map((ev, i) => (
+              <div className="event-card" key={ev.id}>
+                <div className="event-header" style={{ background: bgs[i % bgs.length] }}>
+                  <span style={{ fontSize:"3rem" }}>{ev.emoji || "🎉"}</span>
+                  <span className="event-cat">{ev.category}</span>
+                </div>
+                <div className="event-body">
+                  <div className="event-title">{ev.title}</div>
+                  <div className="event-meta">
+                    <span className="event-meta-item">📅 {ev.date}</span>
+                    <span className="event-meta-item">🕐 {ev.time}</span>
+                  </div>
+                  <div style={{ fontSize:"0.77rem", color:"var(--purple)", background:"rgba(167,139,250,0.1)", borderRadius:20, padding:"3px 10px", marginBottom:12, display:"inline-block" }}>
+                    👥 {ev.spots} cupos
+                  </div>
+                  <button className={`attend-btn${attending[ev.id]?" attending":""}`}
+                    onClick={() => { setAttending(a => ({...a,[ev.id]:!a[ev.id]})); onToast(attending[ev.id]?"❌ Cancelaste":"✅ ¡Te apuntaste!"); }}>
+                    {attending[ev.id] ? "✅ ¡Asistirás!" : "Asistir"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      }
     </div>
   );
 }
-
 // ─── BUDDIES ──────────────────────────────────────────────────────────────────
 function BuddiesView({ user }) {
   const [profiles, setProfiles] = useState([]);
