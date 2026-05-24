@@ -653,12 +653,27 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("muro");
   const [toast, setToast] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setUser(data.session?.user || null); setLoading(false); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user || null));
+    supabase.auth.getSession().then(({ data }) => {
+      const u = data.session?.user || null;
+      setUser(u);
+      if (u) checkAdmin(u.email);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user || null);
+      if (session?.user) checkAdmin(session.user.email);
+    });
     return () => subscription.unsubscribe();
   }, []);
+
+  async function checkAdmin(email) {
+    const { data } = await supabase.from("admin_users").select("*").eq("email", email).single();
+    setIsAdmin(!!data);
+  }
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
 
@@ -682,6 +697,7 @@ export default function App() {
           </div>
           <div className="nav-right">
             <Avatar name={nombre} color={randomColor(nombre)} size={34} />
+            {isAdmin && <button onClick={() => setShowAdmin(true)} style={{ padding:"6px 12px", background:"rgba(167,139,250,0.15)", border:"1px solid rgba(167,139,250,0.3)", borderRadius:8, color:"var(--purple)", fontWeight:700, fontSize:"0.78rem", cursor:"pointer" }}>🛡️ Admin</button>}
             <button className="logout-btn" onClick={logout}>Salir</button>
           </div>
         </nav>
@@ -693,7 +709,182 @@ export default function App() {
           </div>
         )}
       </div>
+      {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
       {toast && <div className="toast">{toast}</div>}
     </>
+  );
+}
+
+// ─── ADMIN PANEL ─────────────────────────────────────────────────────────────
+function AdminPanel({ user, onClose }) {
+  const [tab, setTab] = useState("posts");
+  const [posts, setPosts] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newEvent, setNewEvent] = useState({ title: "", date: "", time: "", category: "", spots: "", emoji: "🎉" });
+
+  useEffect(() => { loadAll(); }, [tab]);
+
+  async function loadAll() {
+    setLoading(true);
+    if (tab === "posts") {
+      const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
+      if (data) setPosts(data);
+    } else if (tab === "products") {
+      const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+      if (data) setProducts(data);
+    } else if (tab === "users") {
+      const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      if (data) setUsers(data);
+    } else if (tab === "events") {
+      const { data } = await supabase.from("events").select("*").order("created_at", { ascending: false });
+      if (data) setEvents(data);
+    }
+    setLoading(false);
+  }
+
+  async function deletePost(id) {
+    await supabase.from("posts").delete().eq("id", id);
+    setPosts(p => p.filter(x => x.id !== id));
+  }
+
+  async function deleteProduct(id) {
+    await supabase.from("products").delete().eq("id", id);
+    setProducts(p => p.filter(x => x.id !== id));
+  }
+
+  async function createEvent() {
+    if (!newEvent.title || !newEvent.date) return;
+    await supabase.from("events").insert({ ...newEvent, spots: parseInt(newEvent.spots) || 0 });
+    setNewEvent({ title: "", date: "", time: "", category: "", spots: "", emoji: "🎉" });
+    loadAll();
+  }
+
+  async function deleteEvent(id) {
+    await supabase.from("events").delete().eq("id", id);
+    setEvents(e => e.filter(x => x.id !== id));
+  }
+
+  const adminTabs = [
+    { id: "posts", label: "📝 Posts" },
+    { id: "products", label: "🛒 Productos" },
+    { id: "events", label: "🎉 Eventos" },
+    { id: "users", label: "👥 Usuarios" },
+  ];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 20, width: "100%", maxWidth: 800, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontFamily: "Outfit", fontWeight: 800, fontSize: "1.2rem", color: "var(--text)" }}>🛡️ Panel de Administrador</div>
+            <div style={{ fontSize: "0.78rem", color: "var(--text3)", marginTop: 2 }}>Control total de Help U</div>
+          </div>
+          <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text2)", padding: "6px 12px", cursor: "pointer", fontSize: "0.85rem" }}>✕ Cerrar</button>
+        </div>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, padding: "12px 24px", borderBottom: "1px solid var(--border)" }}>
+          {adminTabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: tab === t.id ? "rgba(78,205,196,0.15)" : "transparent", color: tab === t.id ? "var(--mint)" : "var(--text2)", fontWeight: tab === t.id ? 700 : 400, cursor: "pointer", fontSize: "0.83rem" }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {/* Content */}
+        <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
+          {loading ? <div style={{ textAlign: "center", color: "var(--text3)", padding: 40 }}>Cargando...</div> : (
+            <>
+              {/* POSTS */}
+              {tab === "posts" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ fontSize: "0.85rem", color: "var(--text3)", marginBottom: 8 }}>{posts.length} posts en total</div>
+                  {posts.length === 0 ? <div style={{ textAlign: "center", color: "var(--text3)", padding: 40 }}>No hay posts</div> :
+                    posts.map(p => (
+                      <div key={p.id} style={{ background: "var(--navy3)", borderRadius: 10, padding: 14, display: "flex", gap: 12, alignItems: "flex-start" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)", marginBottom: 4 }}>{p.user_name} <span style={{ color: "var(--mint)", fontSize: "0.75rem" }}>{p.universidad}</span></div>
+                          <div style={{ fontSize: "0.83rem", color: "var(--text2)", lineHeight: 1.5 }}>{p.content}</div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text3)", marginTop: 4 }}>{timeAgo(p.created_at)} · {p.likes || 0} likes</div>
+                        </div>
+                        <button onClick={() => deletePost(p.id)} style={{ background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, color: "var(--coral)", padding: "5px 10px", cursor: "pointer", fontSize: "0.78rem", flexShrink: 0 }}>🗑️ Eliminar</button>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+              {/* PRODUCTS */}
+              {tab === "products" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ fontSize: "0.85rem", color: "var(--text3)", marginBottom: 8 }}>{products.length} productos en total</div>
+                  {products.length === 0 ? <div style={{ textAlign: "center", color: "var(--text3)", padding: 40 }}>No hay productos</div> :
+                    products.map(p => (
+                      <div key={p.id} style={{ background: "var(--navy3)", borderRadius: 10, padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{p.name}</div>
+                          <div style={{ fontSize: "0.78rem", color: "var(--text3)", marginTop: 2 }}>S/ {p.price} · {p.tag} · {p.type === "segunda" ? "Segunda Mano" : "Emprendimiento"} · {p.seller_name}</div>
+                        </div>
+                        <button onClick={() => deleteProduct(p.id)} style={{ background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, color: "var(--coral)", padding: "5px 10px", cursor: "pointer", fontSize: "0.78rem" }}>🗑️ Eliminar</button>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+              {/* EVENTS */}
+              {tab === "events" && (
+                <div>
+                  <div style={{ background: "var(--navy3)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+                    <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)", marginBottom: 12 }}>+ Crear nuevo evento</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Nombre del evento" value={newEvent.title} onChange={e => setNewEvent(n => ({ ...n, title: e.target.value }))} />
+                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Categoría" value={newEvent.category} onChange={e => setNewEvent(n => ({ ...n, category: e.target.value }))} />
+                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Fecha (ej: Sáb 31 Mayo)" value={newEvent.date} onChange={e => setNewEvent(n => ({ ...n, date: e.target.value }))} />
+                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Hora (ej: 10:00 AM)" value={newEvent.time} onChange={e => setNewEvent(n => ({ ...n, time: e.target.value }))} />
+                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Cupos" type="number" value={newEvent.spots} onChange={e => setNewEvent(n => ({ ...n, spots: e.target.value }))} />
+                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Emoji (ej: 🎉)" value={newEvent.emoji} onChange={e => setNewEvent(n => ({ ...n, emoji: e.target.value }))} />
+                    </div>
+                    <button onClick={createEvent} style={{ padding: "9px 20px", background: "linear-gradient(135deg,var(--mint),#38b2ac)", border: "none", borderRadius: 8, color: "var(--navy)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>Crear Evento</button>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {events.length === 0 ? <div style={{ textAlign: "center", color: "var(--text3)", padding: 20 }}>No hay eventos creados aún</div> :
+                      events.map(ev => (
+                        <div key={ev.id} style={{ background: "var(--navy3)", borderRadius: 10, padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
+                          <div style={{ fontSize: "1.5rem" }}>{ev.emoji}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{ev.title}</div>
+                            <div style={{ fontSize: "0.78rem", color: "var(--text3)", marginTop: 2 }}>{ev.date} · {ev.time} · {ev.spots} cupos · {ev.category}</div>
+                          </div>
+                          <button onClick={() => deleteEvent(ev.id)} style={{ background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, color: "var(--coral)", padding: "5px 10px", cursor: "pointer", fontSize: "0.78rem" }}>🗑️ Eliminar</button>
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
+              {/* USERS */}
+              {tab === "users" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ fontSize: "0.85rem", color: "var(--text3)", marginBottom: 8 }}>{users.length} usuarios registrados</div>
+                  {users.length === 0 ? <div style={{ textAlign: "center", color: "var(--text3)", padding: 40 }}>No hay usuarios aún</div> :
+                    users.map(u => (
+                      <div key={u.id} style={{ background: "var(--navy3)", borderRadius: 10, padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
+                        <Avatar name={u.nombre || "U"} color={randomColor(u.nombre || "")} size={36} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{u.nombre || "Sin nombre"}</div>
+                          <div style={{ fontSize: "0.78rem", color: "var(--text3)", marginTop: 2 }}>{u.universidad} · {u.ciudad} · Carnet: {u.carnet}</div>
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "var(--mint)", background: "rgba(78,205,196,0.1)", padding: "3px 8px", borderRadius: 20 }}>✅ Verificado</div>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
