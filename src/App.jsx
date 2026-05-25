@@ -537,20 +537,46 @@ function MarketView({ user, onToast }) {
 }
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
-function EventsView({ onToast }) {
+function EventsView({ user, onToast }) {
   const [events, setEvents] = useState([]);
   const [attending, setAttending] = useState({});
   const [loading, setLoading] = useState(true);
   const bgs = ["linear-gradient(135deg,#FF6B6B,#ffa500)","linear-gradient(135deg,#4ECDC4,#44a8ff)","linear-gradient(135deg,#A8E6CF,#4ECDC4)","linear-gradient(135deg,#A78BFA,#818cf8)","linear-gradient(135deg,#FFB347,#FF6B6B)","linear-gradient(135deg,#5C7CFA,#A78BFA)"];
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from("events").select("*").order("created_at", { ascending: false });
-      if (data) setEvents(data);
-      setLoading(false);
+  useEffect(() => { loadEvents(); }, []);
+
+  async function loadEvents() {
+    setLoading(true);
+    const { data } = await supabase.from("events").select("*").order("created_at", { ascending: false });
+    if (data) setEvents(data);
+    if (user) {
+      const { data: myAttendees } = await supabase.from("event_attendees").select("event_id").eq("user_id", user.id);
+      if (myAttendees) {
+        const map = {};
+        myAttendees.forEach(a => map[a.event_id] = true);
+        setAttending(map);
+      }
     }
-    load();
-  }, []);
+    setLoading(false);
+  }
+
+  async function toggleAttend(ev) {
+    if (!user) return;
+    const isAttending = attending[ev.id];
+    const newSpots = isAttending ? (ev.spots || 0) + 1 : Math.max(0, (ev.spots || 0) - 1);
+    if (!isAttending && ev.spots <= 0) { onToast("❌ No hay cupos disponibles"); return; }
+    setAttending(a => ({...a, [ev.id]: !isAttending}));
+    setEvents(evs => evs.map(e => e.id === ev.id ? {...e, spots: newSpots} : e));
+    if (isAttending) {
+      await supabase.from("event_attendees").delete().eq("event_id", ev.id).eq("user_id", user.id);
+      await supabase.from("events").update({ spots: newSpots }).eq("id", ev.id);
+      onToast("❌ Cancelaste tu asistencia");
+    } else {
+      await supabase.from("event_attendees").insert({ event_id: ev.id, user_id: user.id });
+      await supabase.from("events").update({ spots: newSpots }).eq("id", ev.id);
+      onToast("✅ ¡Te apuntaste al evento!");
+    }
+  }
 
   return (
     <div style={{ flex:1 }}>
@@ -566,28 +592,39 @@ function EventsView({ onToast }) {
           </div>
         ) : (
           <div className="events-grid">
-            {events.map((ev, i) => (
-              <div className="event-card" key={ev.id}>
-                <div className="event-header" style={{ background: bgs[i % bgs.length] }}>
-                  <span style={{ fontSize:"3rem" }}>{ev.emoji || "🎉"}</span>
-                  <span className="event-cat">{ev.category}</span>
-                </div>
-                <div className="event-body">
-                  <div className="event-title">{ev.title}</div>
-                  <div className="event-meta">
-                    <span className="event-meta-item">📅 {ev.date}</span>
-                    <span className="event-meta-item">🕐 {ev.time}</span>
+            {events.map((ev, i) => {
+              const sinCupos = ev.spots <= 0;
+              const yaAsiste = attending[ev.id];
+              return (
+                <div className="event-card" key={ev.id}>
+                  <div className="event-header" style={{ background: ev.imagen_url ? "none" : bgs[i % bgs.length], position:"relative" }}>
+                    {ev.imagen_url ? <img src={ev.imagen_url} alt={ev.title} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:"3rem" }}>{ev.emoji || "🎉"}</span>}
+                    <span className="event-cat">{ev.category}</span>
+                    {sinCupos && !yaAsiste && <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"1rem", fontWeight:700, color:"white" }}>AGOTADO</div>}
                   </div>
-                  <div style={{ fontSize:"0.77rem", color:"var(--purple)", background:"rgba(167,139,250,0.1)", borderRadius:20, padding:"3px 10px", marginBottom:12, display:"inline-block" }}>
-                    👥 {ev.spots} cupos
+                  <div className="event-body">
+                    <div className="event-title">{ev.title}</div>
+                    <div className="event-meta">
+                      <span className="event-meta-item">📅 {ev.date}</span>
+                      <span className="event-meta-item">🕐 {ev.time}</span>
+                    </div>
+                    {ev.lugar && <div style={{ fontSize:"0.77rem", color:"var(--text3)", marginBottom:6 }}>📍 {ev.lugar}</div>}
+                    <div style={{ fontSize:"0.77rem", color: sinCupos && !yaAsiste ? "var(--coral)" : "var(--purple)", background: sinCupos && !yaAsiste ? "rgba(255,107,107,0.1)" : "rgba(167,139,250,0.1)", borderRadius:20, padding:"3px 10px", marginBottom:12, display:"inline-block" }}>
+                      👥 {sinCupos && !yaAsiste ? "Sin cupos" : ev.spots + " cupos restantes"}
+                    </div>
+                    <button className={"attend-btn" + (yaAsiste ? " attending" : "")} disabled={sinCupos && !yaAsiste}
+                      onClick={() => toggleAttend(ev)} style={{ opacity: sinCupos && !yaAsiste ? 0.5 : 1 }}>
+                      {yaAsiste ? "✅ ¡Asistirás!" : sinCupos ? "Sin cupos" : "Asistir"}
+                    </button>
+                    {yaAsiste && ev.whatsapp_link && (
+                      <a href={ev.whatsapp_link} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginTop:8, padding:"8px", background:"rgba(37,211,102,0.15)", border:"1px solid rgba(37,211,102,0.3)", borderRadius:8, color:"#25D166", fontSize:"0.82rem", fontWeight:600, textDecoration:"none" }}>
+                        💬 Unirse al grupo de WhatsApp
+                      </a>
+                    )}
                   </div>
-                  <button className={"attend-btn" + (attending[ev.id] ? " attending" : "")}
-                    onClick={() => { setAttending(a => ({...a,[ev.id]:!a[ev.id]})); onToast(attending[ev.id] ? "❌ Cancelaste" : "✅ ¡Te apuntaste!"); }}>
-                    {attending[ev.id] ? "✅ ¡Asistirás!" : "Asistir"}
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       }
@@ -826,7 +863,7 @@ export default function App() {
           <div className="main-layout">
             {tab === "muro" && <><Sidebar user={user} onViewBuddies={() => setTab("buddies")} /><FeedView user={user} /><div className="right-panel" /></>}
             {tab === "mercado" && <MarketView user={user} onToast={showToast} />}
-            {tab === "eventos" && <EventsView onToast={showToast} />}
+            {tab === "eventos" && <EventsView user={user} onToast={showToast} />}
           </div>
         )}
       </div>
@@ -956,7 +993,7 @@ function AdminPanel({ user, onClose }) {
   const [users, setUsers] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newEvent, setNewEvent] = useState({ title: "", date: "", time: "", category: "", spots: "", emoji: "🎉" });
+  const [newEvent, setNewEvent] = useState({ title: "", date: "", time: "", category: "", spots: "", emoji: "🎉", lugar: "", whatsapp_link: "" });
 
   useEffect(() => { loadAll(); }, [tab]);
 
@@ -1078,7 +1115,9 @@ function AdminPanel({ user, onClose }) {
                       <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Cupos" type="number" value={newEvent.spots} onChange={e => setNewEvent(n => ({ ...n, spots: e.target.value }))} />
                       <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Emoji (ej: 🎉)" value={newEvent.emoji} onChange={e => setNewEvent(n => ({ ...n, emoji: e.target.value }))} />
                     </div>
-                    <button onClick={createEvent} style={{ padding: "9px 20px", background: "linear-gradient(135deg,var(--mint),#38b2ac)", border: "none", borderRadius: 8, color: "var(--navy)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>Crear Evento</button>
+                    <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none", marginBottom: 10, width: "100%" }} placeholder="Lugar (ej: Parque Kennedy, Miraflores)" value={newEvent.lugar} onChange={e => setNewEvent(n => ({ ...n, lugar: e.target.value }))} />
+                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none", marginBottom: 10, width: "100%" }} placeholder="Link de WhatsApp (opcional)" value={newEvent.whatsapp_link} onChange={e => setNewEvent(n => ({ ...n, whatsapp_link: e.target.value }))} />
+                      <button onClick={createEvent} style={{ padding: "9px 20px", background: "linear-gradient(135deg,var(--mint),#38b2ac)", border: "none", borderRadius: 8, color: "var(--navy)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>Crear Evento</button>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {events.length === 0 ? <div style={{ textAlign: "center", color: "var(--text3)", padding: 20 }}>No hay eventos creados aún</div> :
