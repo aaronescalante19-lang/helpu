@@ -673,19 +673,41 @@ function AvatarWithFetch({ userId, name, size = 40 }) {
 function Sidebar({ user, onViewBuddies }) {
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
   const uni = user?.user_metadata?.universidad || "";
+  const [stats, setStats] = useState({ posts: 0, diasActivo: 1 });
+  const [descripcion, setDescripcion] = useState("");
+
+  useEffect(() => {
+    async function loadStats() {
+      const { count } = await supabase.from("posts").select("*", { count: "exact", head: true }).eq("user_id", user.id);
+      const { data: profile } = await supabase.from("profiles").select("descripcion, created_at").eq("user_id", user.id).single();
+      const dias = profile?.created_at ? Math.max(1, Math.floor((Date.now() - new Date(profile.created_at)) / 86400000)) : 1;
+      setStats({ posts: count || 0, diasActivo: dias });
+      setDescripcion(profile?.descripcion || "");
+    }
+    loadStats();
+  }, []);
+
   return (
     <div className="sidebar">
       <div className="card" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
         <AvatarWithFetch userId={user?.id} name={nombre} size={56} />
         <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{nombre}</div>
         <div style={{ fontSize:"0.78rem", color:"var(--text3)" }}>{uni}</div>
+        {descripcion && <div style={{ fontSize:"0.78rem", color:"var(--text2)", textAlign:"center", lineHeight:1.5, marginTop:4 }}>{descripcion}</div>}
       </div>
       <div className="card">
         <div className="card-title">Tu red</div>
-        {[["🔥","#FF6B6B","rgba(255,107,107,0.1)","Activo hoy"],["🤝","#4ECDC4","rgba(78,205,196,0.1)","Buddies"],["🗓️","#A78BFA","rgba(167,139,250,0.1)","Eventos"]].map(([icon,clr,bg,lbl]) => (
+        {[
+          ["🔥","#FF6B6B","rgba(255,107,107,0.1)", stats.diasActivo, "Días en Help U"],
+          ["📝","#4ECDC4","rgba(78,205,196,0.1)", stats.posts, "Posts publicados"],
+          ["🗓️","#A78BFA","rgba(167,139,250,0.1)", "→", "Ver eventos"]
+        ].map(([icon,clr,bg,val,lbl]) => (
           <div className="stat-item" key={lbl}>
             <div className="stat-icon" style={{ background:bg, color:clr }}>{icon}</div>
-            <div><div className="stat-lbl">{lbl}</div></div>
+            <div style={{ flex:1 }}>
+              <div className="stat-val">{val}</div>
+              <div className="stat-lbl">{lbl}</div>
+            </div>
           </div>
         ))}
         <button onClick={onViewBuddies} style={{ width:"100%", marginTop:12, padding:"9px", background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.2)", borderRadius:8, color:"var(--mint)", fontWeight:600, fontSize:"0.83rem", cursor:"pointer" }}>
