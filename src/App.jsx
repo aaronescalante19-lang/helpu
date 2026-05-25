@@ -685,19 +685,35 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user || null;
       setUser(u);
-      if (u) checkAdmin(u.email);
+      if (u) checkAdmin(u.email, u.id, u.user_metadata);
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user || null);
-      if (session?.user) checkAdmin(session.user.email);
+      if (session?.user) checkAdmin(session.user.email, session.user.id, session.user.user_metadata);
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  async function checkAdmin(email) {
+  async function checkAdmin(email, userId, metadata) {
     const { data } = await supabase.from("admin_users").select("*").eq("email", email).single();
     setIsAdmin(!!data);
+    // Save profile if not exists
+    if (userId) {
+      const { data: existing } = await supabase.from("profiles").select("id").eq("user_id", userId).single();
+      if (!existing) {
+        const esInstitucional = email.includes(".edu.pe") || email.includes(".edu.");
+        await supabase.from("profiles").insert({
+          user_id: userId,
+          nombre: metadata?.nombre || email.split("@")[0],
+          universidad: metadata?.universidad || "",
+          carnet: metadata?.carnet || "",
+          dni: metadata?.carnet || "",
+          tipo_correo: esInstitucional ? "institucional" : "personal",
+          status: esInstitucional ? "aprobado" : "pendiente"
+        });
+      }
+    }
   }
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
