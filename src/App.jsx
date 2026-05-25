@@ -250,15 +250,25 @@ function LoginScreen({ onLogin }) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        if (!carnet || carnet.length < 5) throw new Error("El carnet debe tener al menos 5 dígitos");
         if (!nombre.trim()) throw new Error("Escribe tu nombre completo");
         if (!uni.trim()) throw new Error("Escribe tu universidad o instituto");
+        const esInstitucional = email.includes(".edu.pe") || email.includes(".edu.");
+        const dni = esInstitucional ? carnet : carnet;
+        if (!carnet || carnet.length < 6) throw new Error(esInstitucional ? "El carnet debe tener al menos 6 dígitos" : "El DNI debe tener 8 dígitos");
+        const status = esInstitucional ? "aprobado" : "pendiente";
         const { data, error } = await supabase.auth.signUp({ email, password,
           options: { data: { nombre, carnet, universidad: uni } }
         });
         if (error) throw error;
+        if (data.user) {
+          await supabase.from("profiles").upsert({
+            user_id: data.user.id, nombre, universidad: uni,
+            carnet, dni: carnet, tipo_correo: esInstitucional ? "institucional" : "personal",
+            status
+          });
+        }
         if (data.user && !data.session) {
-          setErr("✅ Revisa tu correo para confirmar tu cuenta");
+          setErr(esInstitucional ? "✅ Revisa tu correo institucional para confirmar tu cuenta" : "✅ Revisa tu correo para confirmar. Tu cuenta será revisada por el administrador.");
           setLoading(false); return;
         }
       }
@@ -287,8 +297,9 @@ function LoginScreen({ onLogin }) {
             <input className="login-input" placeholder="Ej: Aaron Escalante" value={nombre} onChange={e => setNombre(e.target.value)} />
             <label className="login-label">Universidad o Instituto</label>
             <input className="login-input" placeholder="Ej: PUCP, UPC, TECSUP..." value={uni} onChange={e => setUni(e.target.value)} />
-            <label className="login-label">N° de Carnet Universitario</label>
-            <input className="login-input" placeholder="Ej: 20230142" value={carnet} onChange={e => setCarnet(e.target.value)} />
+            <label className="login-label">DNI o N° de Carnet Universitario</label>
+            <input className="login-input" placeholder="Ej: 12345678 o 20230142" value={carnet} onChange={e => setCarnet(e.target.value)} />
+            {!email.includes(".edu") && email.includes("@") && <div style={{ fontSize:"0.75rem", color:"var(--amber)", background:"rgba(255,179,71,0.1)", padding:"8px 12px", borderRadius:8, marginBottom:8 }}>⏳ Con correo personal tu cuenta será revisada por el administrador antes de activarse.</div>}
           </>
         )}
         <label className="login-label">Correo institucional</label>
@@ -759,29 +770,26 @@ function AdminPanel({ user, onClose }) {
     setLoading(false);
   }
 
- async function deletePost(id) {
+  async function deletePost(id) {
     await supabase.from("posts").delete().eq("id", id);
-    const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
-    if (data) setPosts(data);
+    setPosts(prev => prev.filter(x => x.id !== id));
   }
 
   async function deleteProduct(id) {
     await supabase.from("products").delete().eq("id", id);
-    const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
-    if (data) setProducts(data);
+    setProducts(prev => prev.filter(x => x.id !== id));
   }
 
   async function createEvent() {
     if (!newEvent.title || !newEvent.date) return;
     await supabase.from("events").insert({ ...newEvent, spots: parseInt(newEvent.spots) || 0 });
     setNewEvent({ title: "", date: "", time: "", category: "", spots: "", emoji: "🎉" });
-    
+    loadAll();
   }
 
- async function deleteEvent(id) {
+  async function deleteEvent(id) {
     await supabase.from("events").delete().eq("id", id);
-    const { data } = await supabase.from("events").select("*").order("created_at", { ascending: false });
-    if (data) setEvents(data);
+    setEvents(prev => prev.filter(x => x.id !== id));
   }
 
   const adminTabs = [
@@ -883,16 +891,25 @@ function AdminPanel({ user, onClose }) {
               {/* USERS */}
               {tab === "users" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ fontSize: "0.85rem", color: "var(--text3)", marginBottom: 8 }}>{users.length} usuarios registrados</div>
+                  <div style={{ fontSize: "0.85rem", color: "var(--text3)", marginBottom: 8 }}>{users.length} usuarios registrados · {users.filter(u => u.status === "pendiente").length} pendientes</div>
                   {users.length === 0 ? <div style={{ textAlign: "center", color: "var(--text3)", padding: 40 }}>No hay usuarios aún</div> :
                     users.map(u => (
                       <div key={u.id} style={{ background: "var(--navy3)", borderRadius: 10, padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
                         <Avatar name={u.nombre || "U"} color={randomColor(u.nombre || "")} size={36} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{u.nombre || "Sin nombre"}</div>
-                          <div style={{ fontSize: "0.78rem", color: "var(--text3)", marginTop: 2 }}>{u.universidad} · {u.ciudad} · Carnet: {u.carnet}</div>
+                          <div style={{ fontSize: "0.78rem", color: "var(--text3)", marginTop: 2 }}>{u.universidad} · DNI/Carnet: {u.dni || u.carnet} · {u.tipo_correo === "institucional" ? "📧 Correo institucional" : "📱 Correo personal"}</div>
                         </div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--mint)", background: "rgba(78,205,196,0.1)", padding: "3px 8px", borderRadius: 20 }}>✅ Verificado</div>
+                        {u.status === "pendiente" ? (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={async () => { await supabase.from("profiles").update({ status: "aprobado" }).eq("id", u.id); loadAll(); }} style={{ background: "rgba(78,205,196,0.15)", border: "1px solid rgba(78,205,196,0.3)", borderRadius: 8, color: "var(--mint)", padding: "5px 10px", cursor: "pointer", fontSize: "0.78rem" }}>✅ Aprobar</button>
+                            <button onClick={async () => { await supabase.from("profiles").update({ status: "rechazado" }).eq("id", u.id); loadAll(); }} style={{ background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, color: "var(--coral)", padding: "5px 10px", cursor: "pointer", fontSize: "0.78rem" }}>❌ Rechazar</button>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: "0.72rem", color: u.status === "aprobado" ? "var(--mint)" : "var(--coral)", background: u.status === "aprobado" ? "rgba(78,205,196,0.1)" : "rgba(255,107,107,0.1)", padding: "3px 8px", borderRadius: 20 }}>
+                            {u.status === "aprobado" ? "✅ Aprobado" : "❌ Rechazado"}
+                          </div>
+                        )}
                       </div>
                     ))
                   }
