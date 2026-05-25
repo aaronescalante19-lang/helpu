@@ -616,9 +616,9 @@ function EventsView({ user, onToast }) {
                       onClick={() => toggleAttend(ev)} style={{ opacity: sinCupos && !yaAsiste ? 0.5 : 1 }}>
                       {yaAsiste ? "✅ ¡Asistirás!" : sinCupos ? "Sin cupos" : "Asistir"}
                     </button>
-                    {yaAsiste && ev.whatsapp_link && (
-                      <a href={ev.whatsapp_link} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginTop:8, padding:"8px", background:"rgba(37,211,102,0.15)", border:"1px solid rgba(37,211,102,0.3)", borderRadius:8, color:"#25D166", fontSize:"0.82rem", fontWeight:600, textDecoration:"none" }}>
-                        💬 Unirse al grupo de WhatsApp
+                    {yaAsiste && (
+                      <a href={ev.whatsapp_link || "https://wa.me/?text=" + encodeURIComponent("Hola! Me apunté al evento *" + ev.title + "* de Help U 🎉")} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginTop:8, padding:"8px", background:"rgba(37,211,102,0.15)", border:"1px solid rgba(37,211,102,0.3)", borderRadius:8, color:"#25D166", fontSize:"0.82rem", fontWeight:600, textDecoration:"none" }}>
+                        💬 Coordinar por WhatsApp
                       </a>
                     )}
                   </div>
@@ -1107,6 +1107,22 @@ function AdminPanel({ user, onClose }) {
                 <div>
                   <div style={{ background: "var(--navy3)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
                     <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)", marginBottom: 12 }}>+ Crear nuevo evento</div>
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, color:"var(--mint)", fontSize:"0.82rem", cursor:"pointer", fontWeight:600 }}>
+                        📷 Subir foto del evento
+                        <input type="file" accept="image/*" style={{ display:"none" }} onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const path = "events/" + Date.now() + "." + file.name.split(".").pop();
+                          const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+                          if (!error) {
+                            const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+                            setNewEvent(n => ({ ...n, imagen_url: data.publicUrl }));
+                          }
+                        }} />
+                      </label>
+                      {newEvent.imagen_url && <img src={newEvent.imagen_url} alt="preview" style={{ width:"100%", height:120, objectFit:"cover", borderRadius:8, marginTop:8 }} />}
+                    </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                       <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Nombre del evento" value={newEvent.title} onChange={e => setNewEvent(n => ({ ...n, title: e.target.value }))} />
                       <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Categoría" value={newEvent.category} onChange={e => setNewEvent(n => ({ ...n, category: e.target.value }))} />
@@ -1116,7 +1132,6 @@ function AdminPanel({ user, onClose }) {
                       <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none" }} placeholder="Emoji (ej: 🎉)" value={newEvent.emoji} onChange={e => setNewEvent(n => ({ ...n, emoji: e.target.value }))} />
                     </div>
                     <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none", marginBottom: 10, width: "100%" }} placeholder="Lugar (ej: Parque Kennedy, Miraflores)" value={newEvent.lugar} onChange={e => setNewEvent(n => ({ ...n, lugar: e.target.value }))} />
-                      <input style={{ padding: "9px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: "0.85rem", outline: "none", marginBottom: 10, width: "100%" }} placeholder="Link de WhatsApp (opcional)" value={newEvent.whatsapp_link} onChange={e => setNewEvent(n => ({ ...n, whatsapp_link: e.target.value }))} />
                       <button onClick={createEvent} style={{ padding: "9px 20px", background: "linear-gradient(135deg,var(--mint),#38b2ac)", border: "none", borderRadius: 8, color: "var(--navy)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>Crear Evento</button>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
