@@ -206,8 +206,13 @@ const css = `
 `;
 
 // ─── AVATAR ───────────────────────────────────────────────────────────────────
-function Avatar({ name = "?", color = "#4ECDC4", size = 40 }) {
+function Avatar({ name = "?", color = "#4ECDC4", size = 40, imageUrl = null }) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  if (imageUrl) return (
+    <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "2px solid rgba(255,255,255,0.1)" }}>
+      <img src={imageUrl} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+    </div>
+  );
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", background: color,
       display: "flex", alignItems: "center", justifyContent: "center",
@@ -215,6 +220,16 @@ function Avatar({ name = "?", color = "#4ECDC4", size = 40 }) {
       {initials}
     </div>
   );
+}
+
+// Cache de avatares para no recargar cada vez
+const avatarCache = {};
+async function getAvatarUrl(userId) {
+  if (!userId) return null;
+  if (avatarCache[userId] !== undefined) return avatarCache[userId];
+  const { data } = await supabase.from("profiles").select("avatar_url").eq("user_id", userId).single();
+  avatarCache[userId] = data?.avatar_url || null;
+  return avatarCache[userId];
 }
 
 function randomColor(str = "") {
@@ -352,7 +367,7 @@ function FeedView({ user }) {
     <div className="feed-area">
       <div className="post-create">
         <div className="post-create-row">
-          <Avatar name={nombre} color={randomColor(nombre)} size={40} />
+          <Avatar name={nombre} color={randomColor(nombre)} size={40} imageUrl={user?.user_metadata?.avatar_url} />
           <textarea className="post-textarea" placeholder="¿Qué está pasando? Comparte con la comunidad..."
             value={text} onChange={e => setText(e.target.value)} rows={2} />
         </div>
@@ -403,11 +418,13 @@ function PostCard({ post, user, onUpdate }) {
   }
 
   const color = randomColor(post.user_name || "");
+  const [postAvatar, setPostAvatar] = useState(null);
+  useEffect(() => { if (post.user_id) getAvatarUrl(post.user_id).then(setPostAvatar); }, [post.user_id]);
 
   return (
     <div className="post-card">
       <div className="post-header">
-        <Avatar name={post.user_name} color={color} size={40} />
+        <Avatar name={post.user_name} color={color} size={40} imageUrl={postAvatar} />
         <div style={{ flex: 1 }}>
           <div className="post-uname">{post.user_name}
             {post.universidad && <span className="post-uni-badge">{post.universidad}</span>}
@@ -645,6 +662,13 @@ function BuddiesView({ user }) {
   );
 }
 
+
+function AvatarWithFetch({ userId, name, size = 40 }) {
+  const [imgUrl, setImgUrl] = useState(null);
+  useEffect(() => { if (userId) getAvatarUrl(userId).then(setImgUrl); }, [userId]);
+  return <Avatar name={name} color={randomColor(name)} size={size} imageUrl={imgUrl} />;
+}
+
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 function Sidebar({ user, onViewBuddies }) {
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
@@ -652,7 +676,7 @@ function Sidebar({ user, onViewBuddies }) {
   return (
     <div className="sidebar">
       <div className="card" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-        <Avatar name={nombre} color={randomColor(nombre)} size={56} />
+        <AvatarWithFetch userId={user?.id} name={nombre} size={56} />
         <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{nombre}</div>
         <div style={{ fontSize:"0.78rem", color:"var(--text3)" }}>{uni}</div>
       </div>
