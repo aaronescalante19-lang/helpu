@@ -537,6 +537,68 @@ function MarketView({ user, onToast }) {
 }
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
+
+function EventForum({ eventId, eventTitle, user }) {
+  const [open, setOpen] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
+
+  async function loadComments() {
+    const { data } = await supabase.from("event_comments").select("*").eq("event_id", eventId).order("created_at");
+    if (data) setComments(data);
+  }
+
+  async function sendComment() {
+    if (!text.trim()) return;
+    setLoading(true);
+    const { data: profile } = await supabase.from("profiles").select("avatar_url").eq("user_id", user.id).single();
+    await supabase.from("event_comments").insert({
+      event_id: eventId, user_id: user.id, user_name: nombre,
+      avatar_url: profile?.avatar_url || null, content: text
+    });
+    setText("");
+    loadComments();
+    setLoading(false);
+  }
+
+  function handleOpen() {
+    setOpen(!open);
+    if (!open) loadComments();
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button onClick={handleOpen} style={{ width:"100%", padding:"8px", background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.2)", borderRadius:8, color:"var(--mint)", fontSize:"0.82rem", fontWeight:600, cursor:"pointer" }}>
+        💬 {open ? "Cerrar foro" : "Foro del evento ("+comments.length+")"}
+      </button>
+      {open && (
+        <div style={{ background:"var(--navy3)", borderRadius:10, padding:12, marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ fontSize:"0.75rem", color:"var(--text3)", marginBottom:4 }}>💬 Coordina con los asistentes — puedes compartir tu número si quieres</div>
+          {comments.length === 0 ? <div style={{ textAlign:"center", color:"var(--text3)", fontSize:"0.8rem", padding:"8px 0" }}>Sé el primero en escribir algo 👋</div> :
+            comments.map((c, i) => (
+              <div key={i} style={{ display:"flex", gap:8 }}>
+                <Avatar name={c.user_name} color={randomColor(c.user_name)} size={28} imageUrl={c.avatar_url} />
+                <div style={{ background:"var(--card2)", borderRadius:10, padding:"7px 11px", flex:1 }}>
+                  <div style={{ fontWeight:600, fontSize:"0.76rem", color:"var(--text)", marginBottom:2 }}>{c.user_name}</div>
+                  <div style={{ fontSize:"0.82rem", color:"var(--text2)", lineHeight:1.5 }}>{c.content}</div>
+                </div>
+              </div>
+            ))
+          }
+          <div style={{ display:"flex", gap:8, marginTop:4 }}>
+            <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key==="Enter" && sendComment()}
+              placeholder="Escribe algo... (ej: Mi número es 999...)"
+              style={{ flex:1, padding:"7px 11px", background:"var(--card2)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.82rem", outline:"none", fontFamily:"DM Sans" }} />
+            <button onClick={sendComment} disabled={loading} style={{ padding:"7px 14px", background:"var(--mint)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, fontSize:"0.8rem", cursor:"pointer" }}>→</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EventsView({ user, onToast }) {
   const [events, setEvents] = useState([]);
   const [attending, setAttending] = useState({});
@@ -616,11 +678,7 @@ function EventsView({ user, onToast }) {
                       onClick={() => toggleAttend(ev)} style={{ opacity: sinCupos && !yaAsiste ? 0.5 : 1 }}>
                       {yaAsiste ? "✅ ¡Asistirás!" : sinCupos ? "Sin cupos" : "Asistir"}
                     </button>
-                    {yaAsiste && (
-                      <a href={ev.whatsapp_link || "https://wa.me/?text=" + encodeURIComponent("Hola! Me apunté al evento *" + ev.title + "* de Help U 🎉")} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginTop:8, padding:"8px", background:"rgba(37,211,102,0.15)", border:"1px solid rgba(37,211,102,0.3)", borderRadius:8, color:"#25D166", fontSize:"0.82rem", fontWeight:600, textDecoration:"none" }}>
-                        💬 Coordinar por WhatsApp
-                      </a>
-                    )}
+                    {yaAsiste && <EventForum eventId={ev.id} eventTitle={ev.title} user={user} />}
                   </div>
                 </div>
               );
