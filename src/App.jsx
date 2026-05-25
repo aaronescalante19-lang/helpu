@@ -538,7 +538,7 @@ function MarketView({ user, onToast }) {
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
 
-function EventForum({ eventId, eventTitle, user }) {
+function EventForum({ eventId, eventTitle, user, onOpen }) {
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
@@ -565,13 +565,16 @@ function EventForum({ eventId, eventTitle, user }) {
 
   function handleOpen() {
     setOpen(!open);
-    if (!open) loadComments();
+    if (!open) {
+      loadComments();
+      if (onOpen) onOpen();
+    }
   }
 
   return (
     <div style={{ marginTop: 8 }}>
       <button onClick={handleOpen} style={{ width:"100%", padding:"8px", background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.2)", borderRadius:8, color:"var(--mint)", fontSize:"0.82rem", fontWeight:600, cursor:"pointer" }}>
-        💬 {open ? "Cerrar foro" : "Foro del evento ("+comments.length+")"}
+        💬 {open ? "Cerrar foro" : "Ver foro del evento ("+comments.length+")"}
       </button>
       {open && (
         <div style={{ background:"var(--navy3)", borderRadius:10, padding:12, marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
@@ -602,6 +605,7 @@ function EventForum({ eventId, eventTitle, user }) {
 function EventsView({ user, onToast }) {
   const [events, setEvents] = useState([]);
   const [attending, setAttending] = useState({});
+  const [forumOpened, setForumOpened] = useState({});
   const [loading, setLoading] = useState(true);
   const bgs = ["linear-gradient(135deg,#FF6B6B,#ffa500)","linear-gradient(135deg,#4ECDC4,#44a8ff)","linear-gradient(135deg,#A8E6CF,#4ECDC4)","linear-gradient(135deg,#A78BFA,#818cf8)","linear-gradient(135deg,#FFB347,#FF6B6B)","linear-gradient(135deg,#5C7CFA,#A78BFA)"];
 
@@ -674,11 +678,14 @@ function EventsView({ user, onToast }) {
                     <div style={{ fontSize:"0.77rem", color: sinCupos && !yaAsiste ? "var(--coral)" : "var(--purple)", background: sinCupos && !yaAsiste ? "rgba(255,107,107,0.1)" : "rgba(167,139,250,0.1)", borderRadius:20, padding:"3px 10px", marginBottom:12, display:"inline-block" }}>
                       👥 {sinCupos && !yaAsiste ? "Sin cupos" : ev.spots + " cupos restantes"}
                     </div>
-                    <button className={"attend-btn" + (yaAsiste ? " attending" : "")} disabled={sinCupos && !yaAsiste}
-                      onClick={() => toggleAttend(ev)} style={{ opacity: sinCupos && !yaAsiste ? 0.5 : 1 }}>
-                      {yaAsiste ? "✅ ¡Asistirás!" : sinCupos ? "Sin cupos" : "Asistir"}
+                    <button className={"attend-btn" + (yaAsiste ? " attending" : "")} 
+                      disabled={(sinCupos && !yaAsiste) || (yaAsiste && forumOpened[ev.id])}
+                      onClick={() => toggleAttend(ev)} 
+                      style={{ opacity: (sinCupos && !yaAsiste) || (yaAsiste && forumOpened[ev.id]) ? 0.6 : 1 }}
+                      title={yaAsiste && forumOpened[ev.id] ? "Ya accediste al foro, no puedes cancelar" : ""}>
+                      {yaAsiste && forumOpened[ev.id] ? "🔒 Asistencia confirmada" : yaAsiste ? "✅ ¡Asistirás! (cancelar)" : sinCupos ? "Sin cupos" : "Asistir"}
                     </button>
-                    {yaAsiste && <EventForum eventId={ev.id} eventTitle={ev.title} user={user} />}
+                    {yaAsiste && <EventForum eventId={ev.id} eventTitle={ev.title} user={user} onOpen={() => setForumOpened(f => ({...f, [ev.id]: true}))} />}
                   </div>
                 </div>
               );
