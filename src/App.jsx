@@ -367,7 +367,7 @@ function FeedView({ user }) {
     <div className="feed-area">
       <div className="post-create">
         <div className="post-create-row">
-          <Avatar name={nombre} color={randomColor(nombre)} size={40} imageUrl={user?.user_metadata?.avatar_url} />
+          <AvatarWithFetch userId={user?.id} name={nombre} size={40} />
           <textarea className="post-textarea" placeholder="¿Qué está pasando? Comparte con la comunidad..."
             value={text} onChange={e => setText(e.target.value)} rows={2} />
         </div>
@@ -795,7 +795,7 @@ export default function App() {
             {navLinks.map(l => <button key={l.id} className={`nav-link${tab===l.id?" active":""}`} onClick={() => setTab(l.id)}>{l.label}</button>)}
           </div>
           <div className="nav-right">
-            <div onClick={() => setShowProfile(true)} style={{ cursor:"pointer" }}><Avatar name={nombre} color={randomColor(nombre)} size={34} /></div>
+            <div onClick={() => setShowProfile(true)} style={{ cursor:"pointer" }}><AvatarWithFetch userId={user?.id} name={nombre} size={34} /></div>
             {isAdmin && <button onClick={() => setShowAdmin(true)} style={{ padding:"6px 12px", background:"rgba(167,139,250,0.15)", border:"1px solid rgba(167,139,250,0.3)", borderRadius:8, color:"var(--purple)", fontWeight:700, fontSize:"0.78rem", cursor:"pointer" }}>🛡️ Admin</button>}
             <button className="logout-btn" onClick={logout}>Salir</button>
           </div>
