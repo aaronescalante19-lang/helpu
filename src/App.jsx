@@ -759,16 +759,16 @@ function AdminPanel({ user, onClose }) {
     setLoading(false);
   }
 
-  async function deletePost(id) {
+ async function deletePost(id) {
     await supabase.from("posts").delete().eq("id", id);
-    setPosts(p => p.filter(x => x.id !== id));
-    
+    const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
+    if (data) setPosts(data);
   }
 
   async function deleteProduct(id) {
     await supabase.from("products").delete().eq("id", id);
-    setProducts(p => p.filter(x => x.id !== id));
-
+    const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+    if (data) setProducts(data);
   }
 
   async function createEvent() {
@@ -778,10 +778,10 @@ function AdminPanel({ user, onClose }) {
     
   }
 
-  async function deleteEvent(id) {
+ async function deleteEvent(id) {
     await supabase.from("events").delete().eq("id", id);
-    setEvents(e => e.filter(x => x.id !== id));
-    loadAll();
+    const { data } = await supabase.from("events").select("*").order("created_at", { ascending: false });
+    if (data) setEvents(data);
   }
 
   const adminTabs = [
