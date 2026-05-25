@@ -680,6 +680,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [userStatus, setUserStatus] = useState("aprobado");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -696,22 +697,23 @@ export default function App() {
   }, []);
 
   async function checkAdmin(email, userId, metadata) {
-    const { data } = await supabase.from("admin_users").select("*").eq("email", email).single();
-    setIsAdmin(!!data);
-    // Save profile if not exists
+    const { data: adminData } = await supabase.from("admin_users").select("*").eq("email", email).single();
+    setIsAdmin(!!adminData);
     if (userId) {
-      const { data: existing } = await supabase.from("profiles").select("id").eq("user_id", userId).single();
+      const { data: existing } = await supabase.from("profiles").select("id, status").eq("user_id", userId).single();
       if (!existing) {
         const esInstitucional = email.includes(".edu.pe") || email.includes(".edu.");
         await supabase.from("profiles").insert({
           user_id: userId,
           nombre: metadata?.nombre || email.split("@")[0],
           universidad: metadata?.universidad || "",
-          carnet: metadata?.carnet || "",
           dni: metadata?.carnet || "",
           tipo_correo: esInstitucional ? "institucional" : "personal",
           status: esInstitucional ? "aprobado" : "pendiente"
         });
+        if (!esInstitucional) setUserStatus("pendiente");
+      } else {
+        setUserStatus(existing.status || "aprobado");
       }
     }
   }
@@ -726,6 +728,37 @@ export default function App() {
 
   const nombre = user.user_metadata?.nombre || user.email?.split("@")[0] || "U";
   const navLinks = [{ id:"muro", label:"Muro" }, { id:"mercado", label:"Mercado" }, { id:"eventos", label:"Eventos" }, { id:"buddies", label:"Comunidad" }];
+
+  if (userStatus === "pendiente") return (
+    <>
+      <style>{css}</style>
+      <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, padding:24, background:"var(--navy)" }}>
+        <div style={{ fontSize:"3rem" }}>⏳</div>
+        <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1.4rem", color:"var(--text)", textAlign:"center" }}>Tu cuenta está en revisión</div>
+        <div style={{ color:"var(--text2)", fontSize:"0.9rem", textAlign:"center", maxWidth:360, lineHeight:1.6 }}>
+          Registraste tu cuenta con un correo personal. El administrador revisará tu información y te aprobará pronto. Te notificaremos cuando puedas acceder.
+        </div>
+        <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"12px 20px", fontSize:"0.83rem", color:"var(--text3)" }}>
+          📧 {user.email}
+        </div>
+        <button onClick={logout} style={{ padding:"10px 24px", background:"transparent", border:"1px solid var(--border)", borderRadius:8, color:"var(--text2)", cursor:"pointer", fontSize:"0.85rem" }}>Cerrar sesión</button>
+      </div>
+    </>
+  );
+
+  if (userStatus === "rechazado") return (
+    <>
+      <style>{css}</style>
+      <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, padding:24, background:"var(--navy)" }}>
+        <div style={{ fontSize:"3rem" }}>❌</div>
+        <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1.4rem", color:"var(--text)", textAlign:"center" }}>Cuenta no aprobada</div>
+        <div style={{ color:"var(--text2)", fontSize:"0.9rem", textAlign:"center", maxWidth:360, lineHeight:1.6 }}>
+          Tu cuenta no fue aprobada por el administrador. Si crees que es un error, contacta a soporte.
+        </div>
+        <button onClick={logout} style={{ padding:"10px 24px", background:"transparent", border:"1px solid var(--border)", borderRadius:8, color:"var(--text2)", cursor:"pointer", fontSize:"0.85rem" }}>Cerrar sesión</button>
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -916,16 +949,18 @@ function AdminPanel({ user, onClose }) {
                           <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{u.nombre || "Sin nombre"}</div>
                           <div style={{ fontSize: "0.78rem", color: "var(--text3)", marginTop: 2 }}>{u.universidad} · DNI/Carnet: {u.dni || u.carnet} · {u.tipo_correo === "institucional" ? "📧 Correo institucional" : "📱 Correo personal"}</div>
                         </div>
-                        {u.status === "pendiente" ? (
-                          <div style={{ display: "flex", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          {u.status === "pendiente" && <>
                             <button onClick={async () => { await supabase.from("profiles").update({ status: "aprobado" }).eq("id", u.id); loadAll(); }} style={{ background: "rgba(78,205,196,0.15)", border: "1px solid rgba(78,205,196,0.3)", borderRadius: 8, color: "var(--mint)", padding: "5px 10px", cursor: "pointer", fontSize: "0.78rem" }}>✅ Aprobar</button>
                             <button onClick={async () => { await supabase.from("profiles").update({ status: "rechazado" }).eq("id", u.id); loadAll(); }} style={{ background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, color: "var(--coral)", padding: "5px 10px", cursor: "pointer", fontSize: "0.78rem" }}>❌ Rechazar</button>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: "0.72rem", color: u.status === "aprobado" ? "var(--mint)" : "var(--coral)", background: u.status === "aprobado" ? "rgba(78,205,196,0.1)" : "rgba(255,107,107,0.1)", padding: "3px 8px", borderRadius: 20 }}>
-                            {u.status === "aprobado" ? "✅ Aprobado" : "❌ Rechazado"}
-                          </div>
-                        )}
+                          </>}
+                          {u.status !== "pendiente" && (
+                            <div style={{ fontSize: "0.72rem", color: u.status === "aprobado" ? "var(--mint)" : "var(--coral)", background: u.status === "aprobado" ? "rgba(78,205,196,0.1)" : "rgba(255,107,107,0.1)", padding: "3px 8px", borderRadius: 20 }}>
+                              {u.status === "aprobado" ? "✅ Aprobado" : "❌ Rechazado"}
+                            </div>
+                          )}
+                          <button onClick={async () => { await supabase.from("profiles").delete().eq("id", u.id); loadAll(); }} style={{ background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, color: "var(--coral)", padding: "5px 8px", cursor: "pointer", fontSize: "0.78rem" }}>🗑️</button>
+                        </div>
                       </div>
                     ))
                   }
