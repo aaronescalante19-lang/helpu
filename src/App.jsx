@@ -681,6 +681,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [userStatus, setUserStatus] = useState("aprobado");
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -770,7 +771,7 @@ export default function App() {
             {navLinks.map(l => <button key={l.id} className={`nav-link${tab===l.id?" active":""}`} onClick={() => setTab(l.id)}>{l.label}</button>)}
           </div>
           <div className="nav-right">
-            <Avatar name={nombre} color={randomColor(nombre)} size={34} />
+            <div onClick={() => setShowProfile(true)} style={{ cursor:"pointer" }}><Avatar name={nombre} color={randomColor(nombre)} size={34} /></div>
             {isAdmin && <button onClick={() => setShowAdmin(true)} style={{ padding:"6px 12px", background:"rgba(167,139,250,0.15)", border:"1px solid rgba(167,139,250,0.3)", borderRadius:8, color:"var(--purple)", fontWeight:700, fontSize:"0.78rem", cursor:"pointer" }}>🛡️ Admin</button>}
             <button className="logout-btn" onClick={logout}>Salir</button>
           </div>
@@ -784,8 +785,120 @@ export default function App() {
         )}
       </div>
       {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
+      {showProfile && <ProfileView user={user} onClose={() => setShowProfile(false)} />}
       {toast && <div className="toast">{toast}</div>}
     </>
+  );
+}
+
+
+// ─── PROFILE VIEW ─────────────────────────────────────────────────────────────
+function ProfileView({ user, onClose }) {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+  const [intereses, setIntereses] = useState("");
+  const [carrera, setCarrera] = useState("");
+  const [ciudad, setCiudad] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { loadProfile(); }, []);
+
+  async function loadProfile() {
+    const { data } = await supabase.from("profiles").select("*").eq("user_id", user.id).single();
+    if (data) {
+      setProfile(data);
+      setNombre(data.nombre || "");
+      setDescripcion(data.descripcion || "");
+      setIntereses(data.intereses || "");
+      setCarrera(data.carrera || "");
+      setCiudad(data.ciudad || "");
+      setAvatarUrl(data.avatar_url || "");
+    }
+    setLoading(false);
+  }
+
+  async function uploadAvatar(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = user.id + "." + ext;
+    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+    if (!error) {
+      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+      setAvatarUrl(data.publicUrl);
+    }
+    setUploading(false);
+  }
+
+  async function saveProfile() {
+    setSaving(true);
+    await supabase.from("profiles").update({ nombre, descripcion, intereses, carrera, ciudad, avatar_url: avatarUrl }).eq("user_id", user.id);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  const INTERESES_OPTS = ["Gaming", "Música", "Deportes", "Arte", "Cocina", "Fotografía", "Viajes", "Lectura", "Baile", "Cine", "Tecnología", "Moda"];
+  const interesesArr = intereses ? intereses.split(",").map(i => i.trim()) : [];
+
+  function toggleInteres(i) {
+    const arr = interesesArr.includes(i) ? interesesArr.filter(x => x !== i) : [...interesesArr, i];
+    setIntereses(arr.join(", "));
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20, overflowY:"auto" }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:20, width:"100%", maxWidth:500, maxHeight:"90vh", overflow:"auto" }}>
+        <div style={{ padding:"20px 24px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1.2rem", color:"var(--text)" }}>👤 Mi Perfil</div>
+          <button onClick={onClose} style={{ background:"transparent", border:"1px solid var(--border)", borderRadius:8, color:"var(--text2)", padding:"6px 12px", cursor:"pointer" }}>✕ Cerrar</button>
+        </div>
+        {loading ? <div style={{ textAlign:"center", padding:40, color:"var(--text3)" }}>Cargando...</div> : (
+          <div style={{ padding:24, display:"flex", flexDirection:"column", gap:16 }}>
+            {/* Avatar */}
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}>
+              <div style={{ width:90, height:90, borderRadius:"50%", overflow:"hidden", background:"var(--navy3)", border:"3px solid var(--mint)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                {avatarUrl ? <img src={avatarUrl} alt="avatar" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <Avatar name={nombre || "U"} color={randomColor(nombre)} size={90} />}
+              </div>
+              <label style={{ padding:"7px 16px", background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.3)", borderRadius:8, color:"var(--mint)", fontSize:"0.82rem", cursor:"pointer", fontWeight:600 }}>
+                {uploading ? "Subiendo..." : "📷 Cambiar foto"}
+                <input type="file" accept="image/*" style={{ display:"none" }} onChange={uploadAvatar} disabled={uploading} />
+              </label>
+            </div>
+            {/* Fields */}
+            {[["Nombre completo", nombre, setNombre, "Tu nombre"], ["Universidad o Instituto", profile?.universidad || "", null, profile?.universidad || ""], ["Carrera", carrera, setCarrera, "Ej: Ing. de Software"], ["Ciudad de origen", ciudad, setCiudad, "Ej: Arequipa"]].map(([lbl, val, setter, ph]) => (
+              <div key={lbl}>
+                <div style={{ fontSize:"0.78rem", fontWeight:600, color:"var(--text2)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em" }}>{lbl}</div>
+                <input style={{ width:"100%", padding:"10px 14px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color: setter ? "var(--text)" : "var(--text3)", fontSize:"0.88rem", outline:"none", fontFamily:"DM Sans" }} value={val} onChange={setter ? e => setter(e.target.value) : undefined} placeholder={ph} readOnly={!setter} />
+              </div>
+            ))}
+            <div>
+              <div style={{ fontSize:"0.78rem", fontWeight:600, color:"var(--text2)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em" }}>Descripción</div>
+              <textarea style={{ width:"100%", padding:"10px 14px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.88rem", outline:"none", fontFamily:"DM Sans", resize:"none", minHeight:80 }} value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Cuéntanos sobre ti..." />
+            </div>
+            <div>
+              <div style={{ fontSize:"0.78rem", fontWeight:600, color:"var(--text2)", marginBottom:10, textTransform:"uppercase", letterSpacing:"0.06em" }}>Intereses</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                {INTERESES_OPTS.map(i => (
+                  <button key={i} onClick={() => toggleInteres(i)} style={{ padding:"6px 14px", borderRadius:20, border:"1px solid", borderColor: interesesArr.includes(i) ? "var(--mint)" : "var(--border)", background: interesesArr.includes(i) ? "rgba(78,205,196,0.15)" : "transparent", color: interesesArr.includes(i) ? "var(--mint)" : "var(--text2)", fontSize:"0.82rem", cursor:"pointer" }}>
+                    {i}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button onClick={saveProfile} disabled={saving} style={{ padding:"12px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:10, color:"var(--navy)", fontWeight:700, fontSize:"0.95rem", cursor:"pointer", fontFamily:"Outfit" }}>
+              {saving ? "Guardando..." : saved ? "✅ ¡Guardado!" : "Guardar perfil"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
