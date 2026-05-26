@@ -832,7 +832,10 @@ function Sidebar({ user, onViewBuddies, onViewEventos }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("muro");
+  const [tab, setTab] = useState(() => {
+    const saved = localStorage.getItem("helpu_tab");
+    return saved || "muro";
+  });
   const [toast, setToast] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -874,7 +877,11 @@ export default function App() {
       }
     }
   }
+useEffect(() => {
+    localStorage.setItem("helpu_tab", tab);
+  }, [tab]);
 
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
 
   async function logout() { await supabase.auth.signOut(); setUser(null); }
