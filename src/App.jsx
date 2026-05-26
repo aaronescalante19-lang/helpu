@@ -616,11 +616,16 @@ function EventsView({ user, onToast }) {
     const { data } = await supabase.from("events").select("*").order("created_at", { ascending: false });
     if (data) setEvents(data);
     if (user) {
-      const { data: myAttendees } = await supabase.from("event_attendees").select("event_id").eq("user_id", user.id);
+      const { data: myAttendees } = await supabase.from("event_attendees").select("event_id, forum_opened").eq("user_id", user.id);
       if (myAttendees) {
-        const map = {};
-        myAttendees.forEach(a => map[a.event_id] = true);
-        setAttending(map);
+        const attendMap = {};
+        const forumMap = {};
+        myAttendees.forEach(a => {
+          attendMap[a.event_id] = true;
+          if (a.forum_opened) forumMap[a.event_id] = true;
+        });
+        setAttending(attendMap);
+        setForumOpened(forumMap);
       }
     }
     setLoading(false);
@@ -685,7 +690,10 @@ function EventsView({ user, onToast }) {
                       title={yaAsiste && forumOpened[ev.id] ? "Ya accediste al foro, no puedes cancelar" : ""}>
                       {yaAsiste && forumOpened[ev.id] ? "🔒 Asistencia confirmada" : yaAsiste ? "✅ ¡Asistirás! (cancelar)" : sinCupos ? "Sin cupos" : "Asistir"}
                     </button>
-                    {yaAsiste && <EventForum eventId={ev.id} eventTitle={ev.title} user={user} onOpen={() => setForumOpened(f => ({...f, [ev.id]: true}))} />}
+                    {yaAsiste && <EventForum eventId={ev.id} eventTitle={ev.title} user={user} onOpen={async () => {
+                      setForumOpened(f => ({...f, [ev.id]: true}));
+                      await supabase.from("event_attendees").update({ forum_opened: true }).eq("event_id", ev.id).eq("user_id", user.id);
+                    }} />}
                   </div>
                 </div>
               );
