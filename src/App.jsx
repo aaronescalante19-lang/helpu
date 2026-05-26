@@ -957,8 +957,76 @@ function AvatarWithFetch({ userId, name, size = 40 }) {
   return <Avatar name={name} color={randomColor(name)} size={size} imageUrl={imgUrl} />;
 }
 
+
+function ConversationsList({ user, onOpenChat }) {
+  const [convos, setConvos] = useState([]);
+  const myId = user?.id;
+
+  useEffect(() => {
+    if (!myId) return;
+    loadConvos();
+    const channel = supabase.channel("convos_" + myId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "direct_messages" }, loadConvos)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [myId]);
+
+  async function loadConvos() {
+    const { data } = await supabase.from("direct_messages").select("*")
+      .or("from_user_id.eq." + myId + ",to_user_id.eq." + myId)
+      .eq("accepted", true)
+      .order("created_at", { ascending: false });
+    if (!data) return;
+    // Get unique conversations
+    const seen = new Set();
+    const unique = [];
+    for (const m of data) {
+      const otherId = m.from_user_id === myId ? m.to_user_id : m.from_user_id;
+      if (!seen.has(otherId)) {
+        seen.add(otherId);
+        unique.push({ ...m, otherId });
+      }
+    }
+    // Load profiles
+    const profiles = await Promise.all(unique.map(async (c) => {
+      const { data: p } = await supabase.from("profiles").select("*").eq("user_id", c.otherId).single();
+      return { ...c, profile: p };
+    }));
+    setConvos(profiles.filter(c => c.profile));
+  }
+
+  async function blockUser(otherId) {
+    await supabase.from("direct_messages").delete()
+      .or("and(from_user_id.eq." + myId + ",to_user_id.eq." + otherId + "),and(from_user_id.eq." + otherId + ",to_user_id.eq." + myId + ")");
+    loadConvos();
+  }
+
+  if (convos.length === 0) return null;
+
+  return (
+    <div className="card">
+      <div className="card-title">💬 Mis conversaciones</div>
+      {convos.map((c, i) => {
+        const nombre = c.profile?.nombre || "Buddy";
+        return (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+            <div onClick={() => onOpenChat(c.profile)} style={{ cursor:"pointer", display:"flex", alignItems:"center", gap:8, flex:1 }}>
+              <Avatar name={nombre} color={randomColor(nombre)} size={32} imageUrl={c.profile?.avatar_url} />
+              <div>
+                <div style={{ fontWeight:600, fontSize:"0.82rem", color:"var(--text)" }}>{nombre}</div>
+                <div style={{ fontSize:"0.72rem", color:"var(--text3)" }}>{c.content?.slice(0, 20)}...</div>
+              </div>
+            </div>
+            <button onClick={() => blockUser(c.otherId)} title="Bloquear y eliminar" style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:"0.9rem", padding:4 }}>🚫</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function Sidebar({ user, onViewBuddies, onViewEventos }) {
+function Sidebar({ user, onViewBuddies, onViewEventos, onOpenChat }) {
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
   const uni = user?.user_metadata?.universidad || "";
   const [imageUrl, setImageUrl] = useState("");
@@ -1004,6 +1072,7 @@ function Sidebar({ user, onViewBuddies, onViewEventos }) {
           Ver Buddies →
         </button>
       </div>
+      <ConversationsList user={user} onOpenChat={onOpenChat} />
     </div>
   );
 }
@@ -1132,7 +1201,7 @@ export default function App() {
         </nav>
         {tab === "buddies" ? <div style={{ flex:1 }}><BuddiesView user={user} /></div> : (
           <div className="main-layout">
-            {tab === "muro" && <><Sidebar user={user} onViewBuddies={() => setTab("buddies")} onViewEventos={() => setTab("eventos")} /><FeedView user={user} /><div className="right-panel" /></>}
+            {tab === "muro" && <><Sidebar user={user} onViewBuddies={() => setTab("buddies")} onViewEventos={() => setTab("eventos")} onOpenChat={(profile) => setDmUser(profile)} /><FeedView user={user} /><div className="right-panel" /></>}
             {tab === "mercado" && <MarketView user={user} onToast={showToast} />}
             {tab === "eventos" && <EventsView user={user} onToast={showToast} />}
           </div>
