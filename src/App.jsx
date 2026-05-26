@@ -427,6 +427,15 @@ function PostCard({ post, user, onUpdate }) {
     await supabase.from("comments").insert({ post_id: post.id, content: newComment, user_name: nombre, user_id: user.id });
     const { data } = await supabase.from("comments").select("*").eq("post_id", post.id);
     if (data) setComments(data);
+    if (post.user_id && post.user_id !== user.id) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id,
+        type: "comentario",
+        message: "💬 " + nombre + " comentó tu post: "" + newComment.slice(0, 40) + (newComment.length > 40 ? "..." : "") + """,
+        from_user_id: user.id,
+        from_user_name: nombre
+      });
+    }
     setNewComment("");
   }
 
@@ -568,7 +577,18 @@ function MarketView({ user, onToast }) {
                   <div className="product-price">S/ {p.price}</div>
                   <div style={{ fontSize:"0.72rem", color:"var(--text3)" }}>{p.seller_name}</div>
                 </div>
-                <button className="buy-btn" onClick={() => onToast("🔒 Contactando al vendedor...")}>🔒 Comprar Seguro</button>
+                <button className="buy-btn" onClick={async () => {
+                  onToast("🔒 Contactando al vendedor...");
+                  if (p.user_id && user?.id !== p.user_id) {
+                    await supabase.from("notifications").insert({
+                      user_id: p.user_id,
+                      type: "compra",
+                      message: "🛒 " + (user?.user_metadata?.nombre || "Alguien") + " está interesado en tu producto: " + p.name,
+                      from_user_id: user?.id,
+                      from_user_name: user?.user_metadata?.nombre || "Usuario"
+                    });
+                  }
+                }}>🔒 Comprar Seguro</button>
               </div>
             </div>
           ))}
@@ -805,7 +825,18 @@ function BuddiesView({ user }) {
           </div>
           <div className="buddy-actions">
             <button className="buddy-pass" onClick={() => setIdx(i => i + 1)}>✕</button>
-            <button className="buddy-connect" onClick={() => { setConnected(c => c+1); setIdx(i => i+1); }}>Conectar 🤝</button>
+            <button className="buddy-connect" onClick={async () => {
+          setConnected(c => c+1); setIdx(i => i+1);
+          if (buddy.user_id) {
+            await supabase.from("notifications").insert({
+              user_id: buddy.user_id,
+              type: "buddy",
+              message: "🤝 " + (user?.user_metadata?.nombre || "Alguien") + " quiere conectar contigo como Buddy!",
+              from_user_id: user?.id,
+              from_user_name: user?.user_metadata?.nombre || "Usuario"
+            });
+          }
+        }}>Conectar 🤝</button>
           </div>
         </div>
       </div>
@@ -882,6 +913,8 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [userStatus, setUserStatus] = useState("aprobado");
   const [showProfile, setShowProfile] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -918,6 +951,17 @@ export default function App() {
       }
     }
   }
+
+  useEffect(() => {
+    if (!user) return;
+    async function loadUnread() {
+      const { count } = await supabase.from("notifications").select("*", { count:"exact", head:true }).eq("user_id", user.id).eq("read", false);
+      setUnreadCount(count || 0);
+    }
+    loadUnread();
+    const channel = supabase.channel("notifs").on("postgres_changes", { event:"INSERT", schema:"public", table:"notifications", filter:"user_id=eq."+user.id }, () => { loadUnread(); }).subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user]);
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
 
@@ -985,12 +1029,60 @@ export default function App() {
         )}
       </div>
       {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
+      {showNotifs && <NotificationsPanel user={user} onClose={() => setShowNotifs(false)} />}
       {showProfile && <ProfileView user={user} onClose={() => setShowProfile(false)} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
 }
 
+
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+function NotificationsPanel({ user, onClose }) {
+  const [notifs, setNotifs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadNotifs(); }, []);
+
+  async function loadNotifs() {
+    const { data } = await supabase.from("notifications").select("*")
+      .eq("user_id", user.id).order("created_at", { ascending: false }).limit(30);
+    if (data) setNotifs(data);
+    setLoading(false);
+    // Mark all as read
+    await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false);
+  }
+
+  const icons = { compra: "🛒", comentario: "💬", buddy: "🤝", evento: "🎉", sistema: "📢" };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"flex-start", justifyContent:"flex-end", padding:"70px 20px 20px" }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:16, width:"100%", maxWidth:360, maxHeight:"80vh", overflow:"hidden", display:"flex", flexDirection:"column", boxShadow:"var(--shadow)" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1rem", color:"var(--text)" }}>🔔 Notificaciones</div>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:"1.2rem" }}>✕</button>
+        </div>
+        <div style={{ flex:1, overflow:"auto" }}>
+          {loading ? <div style={{ textAlign:"center", padding:40, color:"var(--text3)" }}>Cargando...</div> :
+            notifs.length === 0 ? <div style={{ textAlign:"center", padding:40, color:"var(--text3)" }}>No tienes notificaciones aún</div> :
+            notifs.map(n => (
+              <div key={n.id} style={{ padding:"12px 20px", borderBottom:"1px solid var(--border)", background: n.read ? "transparent" : "rgba(78,205,196,0.05)", display:"flex", gap:10, alignItems:"flex-start" }}>
+                <div style={{ fontSize:"1.2rem", marginTop:2 }}>{icons[n.type] || "📢"}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:"0.85rem", color:"var(--text)", lineHeight:1.5 }}>{n.message}</div>
+                  <div style={{ fontSize:"0.72rem", color:"var(--text3)", marginTop:4 }}>{timeAgo(n.created_at)}</div>
+                </div>
+                {!n.read && <div style={{ width:8, height:8, borderRadius:"50%", background:"var(--mint)", flexShrink:0, marginTop:6 }} />}
+              </div>
+            ))
+          }
+        </div>
+      </div>
+      <div style={{ position:"fixed", inset:0, zIndex:-1 }} onClick={onClose} />
+    </div>
+  );
+}
 
 // ─── PROFILE VIEW ─────────────────────────────────────────────────────────────
 function ProfileView({ user, onClose }) {
