@@ -772,7 +772,7 @@ function AvatarWithFetch({ userId, name, size = 40 }) {
 }
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function Sidebar({ user, onViewBuddies }) {
+function Sidebar({ user, onViewBuddies, onViewEventos }) {
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
   const uni = user?.user_metadata?.universidad || "";
   const [stats, setStats] = useState({ posts: 0, diasActivo: 1 });
@@ -802,12 +802,12 @@ function Sidebar({ user, onViewBuddies }) {
         {[
           ["🔥","#FF6B6B","rgba(255,107,107,0.1)", stats.diasActivo, "Días en Help U"],
           ["📝","#4ECDC4","rgba(78,205,196,0.1)", stats.posts, "Posts publicados"],
-          ["🗓️","#A78BFA","rgba(167,139,250,0.1)", "→", "Ver eventos"]
-        ].map(([icon,clr,bg,val,lbl]) => (
-          <div className="stat-item" key={lbl}>
+          ["🗓️","#A78BFA","rgba(167,139,250,0.1)", "→", "Ver eventos", true]
+        ].map(([icon,clr,bg,val,lbl,clickable]) => (
+          <div className="stat-item" key={lbl} onClick={clickable ? onViewEventos : undefined} style={{ cursor: clickable ? "pointer" : "default" }}>
             <div className="stat-icon" style={{ background:bg, color:clr }}>{icon}</div>
             <div style={{ flex:1 }}>
-              <div className="stat-val">{val}</div>
+              <div className="stat-val" style={{ color: clickable ? "var(--purple)" : "var(--text)" }}>{val}</div>
               <div className="stat-lbl">{lbl}</div>
             </div>
           </div>
@@ -926,7 +926,7 @@ export default function App() {
         </nav>
         {tab === "buddies" ? <div style={{ flex:1 }}><BuddiesView user={user} /></div> : (
           <div className="main-layout">
-            {tab === "muro" && <><Sidebar user={user} onViewBuddies={() => setTab("buddies")} /><FeedView user={user} /><div className="right-panel" /></>}
+            {tab === "muro" && <><Sidebar user={user} onViewBuddies={() => setTab("buddies")} onViewEventos={() => setTab("eventos")} /><FeedView user={user} /><div className="right-panel" /></>}
             {tab === "mercado" && <MarketView user={user} onToast={showToast} />}
             {tab === "eventos" && <EventsView user={user} onToast={showToast} />}
           </div>
