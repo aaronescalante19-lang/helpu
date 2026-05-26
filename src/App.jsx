@@ -496,7 +496,7 @@ function PostCard({ post, user, onUpdate }) {
       <div className="post-header">
         <Avatar name={post.user_name} color={color} size={40} imageUrl={postAvatar} />
         <div style={{ flex: 1 }}>
-          <div className="post-uname">{post.user_name}
+          <div className="post-uname" onClick={() => post.user_id && window.dispatchEvent(new CustomEvent("viewProfile", {detail: post.user_id}))} style={{ cursor: post.user_id ? "pointer" : "default" }}>{post.user_name}
             {post.universidad && <span className="post-uni-badge">{post.universidad}</span>}
           </div>
           <div className="post-meta">{timeAgo(post.created_at)}</div>
@@ -951,8 +951,8 @@ function BuddiesView({ user }) {
         <div style={{ fontSize:"0.85rem", color:"var(--text3)", marginTop:4 }}>Conecta con estudiantes de todo el Perú</div>
       </div>
       <div className="buddy-card-big">
-        <div className="buddy-card-header" style={{ background:`linear-gradient(135deg,${color}40,${color}20)` }}>
-          <Avatar name={nombre} color={color} size={100} />
+        <div className="buddy-card-header" style={{ background:`linear-gradient(135deg,${color}40,${color}20)`, cursor:"pointer" }} onClick={() => buddy.user_id && window.dispatchEvent(new CustomEvent("viewProfile", {detail: buddy.user_id}))}>
+          <Avatar name={nombre} color={color} size={100} imageUrl={buddy.avatar_url} />
           <div style={{ position:"absolute", top:12, right:12, background:"rgba(78,205,196,0.15)", border:"1px solid rgba(78,205,196,0.3)", borderRadius:20, padding:"3px 10px", fontSize:"0.78rem", color:"var(--mint)", fontWeight:600 }}>
             {match}% match
           </div>
@@ -1225,6 +1225,7 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [dmUser, setDmUser] = useState(null);
   const [showMobileProfile, setShowMobileProfile] = useState(false);
+  const [viewingUser, setViewingUser] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -1270,7 +1271,9 @@ export default function App() {
     }
     loadUnread();
     const channel = supabase.channel("notifs").on("postgres_changes", { event:"INSERT", schema:"public", table:"notifications", filter:"user_id=eq."+user.id }, () => { loadUnread(); }).subscribe();
-    return () => supabase.removeChannel(channel);
+    function handleViewProfile(e) { setViewingUser(e.detail); }
+    window.addEventListener("viewProfile", handleViewProfile);
+    return () => { supabase.removeChannel(channel); window.removeEventListener("viewProfile", handleViewProfile); };
   }, [user]);
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
@@ -1345,6 +1348,7 @@ export default function App() {
       {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
       {showNotifs && <NotificationsPanel user={user} onClose={() => setShowNotifs(false)} onOpenDM={async (fromUserId) => { const { data } = await supabase.from("profiles").select("*").eq("user_id", fromUserId).single(); if (data) { setDmUser(data); setShowNotifs(false); } }} />}
       {dmUser && <DirectMessageChat myUser={user} otherUser={dmUser} onClose={() => setDmUser(null)} />}
+      {viewingUser && <UserProfileView userId={viewingUser} onClose={() => setViewingUser(null)} onSendMessage={(profile) => { setDmUser(profile); setViewingUser(null); }} />}
       {showMobileProfile && <MobileProfilePanel user={user} onClose={() => setShowMobileProfile(false)} onOpenChat={(p) => { setDmUser(p); setShowMobileProfile(false); }} onViewBuddies={() => setTab("buddies")} onViewEventos={() => setTab("eventos")} />}
       {showProfile && <ProfileView user={user} onClose={() => setShowProfile(false)} />}
       {toast && <div className="toast">{toast}</div>}
@@ -1564,6 +1568,85 @@ function NotificationsPanel({ user, onClose, onOpenDM }) {
         </div>
       </div>
       <div style={{ position:"fixed", inset:0, zIndex:-1 }} onClick={onClose} />
+    </div>
+  );
+}
+
+
+function UserProfileView({ userId, onClose, onSendMessage }) {
+  const [profile, setProfile] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const { data: p } = await supabase.from("profiles").select("*").eq("user_id", userId).single();
+      if (p) setProfile(p);
+      const { data: ps } = await supabase.from("posts").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(5);
+      if (ps) setPosts(ps);
+      setLoading(false);
+    }
+    load();
+  }, [userId]);
+
+  if (loading) return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ color:"var(--text3)" }}>Cargando perfil...</div>
+    </div>
+  );
+
+  if (!profile) return null;
+
+  const nombre = profile.nombre || "Estudiante";
+  const interesesArr = profile.intereses ? profile.intereses.split(",").map(i => i.trim()).filter(Boolean) : [];
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:20, width:"100%", maxWidth:440, maxHeight:"90vh", overflow:"auto" }}>
+        {/* Header */}
+        <div style={{ background:"linear-gradient(135deg, " + randomColor(nombre) + "40, " + randomColor(nombre) + "10)", padding:"32px 24px 20px", display:"flex", flexDirection:"column", alignItems:"center", gap:12, position:"relative" }}>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, background:"rgba(0,0,0,0.3)", border:"none", borderRadius:"50%", width:30, height:30, color:"white", cursor:"pointer", fontSize:"1rem", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <div style={{ width:80, height:80, borderRadius:"50%", overflow:"hidden", border:"3px solid rgba(255,255,255,0.3)" }}>
+            {profile.avatar_url ? <img src={profile.avatar_url} alt={nombre} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <Avatar name={nombre} color={randomColor(nombre)} size={80} />}
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1.4rem", color:"var(--text)" }}>{nombre}</div>
+            <div style={{ color:"var(--mint)", fontWeight:600, fontSize:"0.88rem" }}>{profile.universidad}</div>
+            {profile.carrera && <div style={{ color:"var(--text2)", fontSize:"0.82rem" }}>{profile.carrera}</div>}
+            {profile.ciudad && <div style={{ color:"var(--text3)", fontSize:"0.78rem", marginTop:4 }}>📍 Viene de {profile.ciudad}</div>}
+          </div>
+        </div>
+        <div style={{ padding:"20px 24px", display:"flex", flexDirection:"column", gap:16 }}>
+          {profile.descripcion && (
+            <div style={{ background:"var(--navy3)", borderRadius:10, padding:"12px 14px", fontSize:"0.85rem", color:"var(--text2)", lineHeight:1.6 }}>
+              {profile.descripcion}
+            </div>
+          )}
+          {interesesArr.length > 0 && (
+            <div>
+              <div style={{ fontSize:"0.78rem", fontWeight:600, color:"var(--text3)", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>Intereses</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                {interesesArr.map(i => <span key={i} style={{ background:"var(--card2)", border:"1px solid var(--border)", borderRadius:20, padding:"4px 12px", fontSize:"0.78rem", color:"var(--text2)" }}>{i}</span>)}
+              </div>
+            </div>
+          )}
+          {posts.length > 0 && (
+            <div>
+              <div style={{ fontSize:"0.78rem", fontWeight:600, color:"var(--text3)", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>Posts recientes</div>
+              {posts.map(p => (
+                <div key={p.id} style={{ background:"var(--navy3)", borderRadius:8, padding:"10px 12px", marginBottom:8, fontSize:"0.83rem", color:"var(--text2)", lineHeight:1.5 }}>
+                  {p.content?.slice(0, 100)}{p.content?.length > 100 ? "..." : ""}
+                </div>
+              ))}
+            </div>
+          )}
+          {onSendMessage && (
+            <button onClick={() => onSendMessage(profile)} style={{ width:"100%", padding:"12px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:10, color:"var(--navy)", fontWeight:700, fontSize:"0.95rem", cursor:"pointer", fontFamily:"Outfit" }}>
+              💬 Enviar mensaje
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
