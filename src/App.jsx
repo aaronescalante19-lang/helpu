@@ -1020,6 +1020,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [dmUser, setDmUser] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -1138,7 +1139,8 @@ export default function App() {
         )}
       </div>
       {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
-      {showNotifs && <NotificationsPanel user={user} onClose={() => setShowNotifs(false)} />}
+      {showNotifs && <NotificationsPanel user={user} onClose={() => setShowNotifs(false)} onOpenDM={async (fromUserId) => { const { data } = await supabase.from("profiles").select("*").eq("user_id", fromUserId).single(); if (data) { setDmUser(data); setShowNotifs(false); } }} />}
+      {dmUser && <DirectMessageChat myUser={user} otherUser={dmUser} onClose={() => setDmUser(null)} />}
       {showProfile && <ProfileView user={user} onClose={() => setShowProfile(false)} />}
       {toast && <div className="toast">{toast}</div>}
     </>
@@ -1153,13 +1155,16 @@ function DirectMessageChat({ myUser, otherUser, onClose }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
+  const [chatAccepted, setChatAccepted] = useState(false);
+  const [hasSentRequest, setHasSentRequest] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState(null);
   const myNombre = myUser?.user_metadata?.nombre || myUser?.email?.split("@")[0] || "Usuario";
   const otherNombre = otherUser?.nombre || otherUser?.name || "Buddy";
 
   useEffect(() => {
     loadMessages();
     const channel = supabase.channel("dm_" + [myUser.id, otherUser.user_id].sort().join("_"))
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages" }, loadMessages)
+      .on("postgres_changes", { event: "*", schema: "public", table: "direct_messages" }, loadMessages)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
@@ -1168,23 +1173,60 @@ function DirectMessageChat({ myUser, otherUser, onClose }) {
     const { data } = await supabase.from("direct_messages").select("*")
       .or("and(from_user_id.eq." + myUser.id + ",to_user_id.eq." + otherUser.user_id + "),and(from_user_id.eq." + otherUser.user_id + ",to_user_id.eq." + myUser.id + ")")
       .order("created_at");
-    if (data) setMessages(data);
+    if (data) {
+      setMessages(data);
+      const accepted = data.some(m => m.accepted === true);
+      setChatAccepted(accepted);
+      const myRequest = data.find(m => m.from_user_id === myUser.id && m.is_request);
+      setHasSentRequest(!!myRequest);
+      const theirRequest = data.find(m => m.to_user_id === myUser.id && m.is_request && !m.accepted);
+      setPendingRequest(theirRequest || null);
+    }
     setLoading(false);
-    // Mark as read
     await supabase.from("direct_messages").update({ read: true }).eq("to_user_id", myUser.id).eq("from_user_id", otherUser.user_id).eq("read", false);
   }
 
-  async function sendMessage() {
+  async function sendRequest() {
     if (!text.trim()) return;
     const { data: profile } = await supabase.from("profiles").select("avatar_url").eq("user_id", myUser.id).single();
     await supabase.from("direct_messages").insert({
       from_user_id: myUser.id, to_user_id: otherUser.user_id,
-      from_user_name: myNombre, from_avatar_url: profile?.avatar_url || null, content: text
+      from_user_name: myNombre, from_avatar_url: profile?.avatar_url || null,
+      content: text, is_request: true, accepted: false
     });
     await supabase.from("notifications").insert({
       user_id: otherUser.user_id, type: "buddy",
-      message: "💬 " + myNombre + " te envió un mensaje: " + text.slice(0, 40),
+      message: "🤝 " + myNombre + " quiere chatear: " + text.slice(0, 40),
       from_user_id: myUser.id, from_user_name: myNombre
+    });
+    setText("");
+    loadMessages();
+  }
+
+  async function acceptRequest() {
+    if (!pendingRequest) return;
+    await supabase.from("direct_messages").update({ accepted: true }).eq("id", pendingRequest.id);
+    await supabase.from("notifications").insert({
+      user_id: pendingRequest.from_user_id, type: "buddy",
+      message: "✅ " + myNombre + " aceptó tu solicitud de chat!",
+      from_user_id: myUser.id, from_user_name: myNombre
+    });
+    loadMessages();
+  }
+
+  async function rejectRequest() {
+    if (!pendingRequest) return;
+    await supabase.from("direct_messages").delete().eq("id", pendingRequest.id);
+    onClose();
+  }
+
+  async function sendMessage() {
+    if (!text.trim() || !chatAccepted) return;
+    const { data: profile } = await supabase.from("profiles").select("avatar_url").eq("user_id", myUser.id).single();
+    await supabase.from("direct_messages").insert({
+      from_user_id: myUser.id, to_user_id: otherUser.user_id,
+      from_user_name: myNombre, from_avatar_url: profile?.avatar_url || null,
+      content: text, is_request: false, accepted: true
     });
     setText("");
   }
@@ -1201,31 +1243,56 @@ function DirectMessageChat({ myUser, otherUser, onClose }) {
           <button onClick={onClose} style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:"1.2rem" }}>✕</button>
         </div>
         <div style={{ flex:1, overflow:"auto", padding:16, display:"flex", flexDirection:"column", gap:10 }}>
-          {loading ? <div style={{ textAlign:"center", color:"var(--text3)" }}>Cargando...</div> :
-            messages.length === 0 ? (
-              <div style={{ textAlign:"center", color:"var(--text3)", padding:40 }}>
-                <div style={{ fontSize:"2rem", marginBottom:8 }}>👋</div>
-                <div>¡Conectaste con {otherNombre}!</div>
-                <div style={{ fontSize:"0.78rem", marginTop:8 }}>Envíale un mensaje para coordinar</div>
-              </div>
-            ) : messages.map((m, i) => (
-              <div key={i} style={{ display:"flex", gap:8, flexDirection: m.from_user_id === myUser.id ? "row-reverse" : "row" }}>
-                <Avatar name={m.from_user_name} color={randomColor(m.from_user_name)} size={30} imageUrl={m.from_avatar_url} />
-                <div style={{ maxWidth:"70%" }}>
-                  <div style={{ background: m.from_user_id === myUser.id ? "rgba(78,205,196,0.2)" : "var(--card2)", borderRadius:10, padding:"8px 12px" }}>
-                    <div style={{ fontSize:"0.85rem", color:"var(--text)", lineHeight:1.5 }}>{m.content}</div>
+          {loading ? <div style={{ textAlign:"center", color:"var(--text3)" }}>Cargando...</div> : (
+            <>
+              {pendingRequest && (
+                <div style={{ background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.2)", borderRadius:12, padding:16, textAlign:"center" }}>
+                  <div style={{ fontSize:"0.85rem", color:"var(--text)", marginBottom:8 }}>🤝 <strong>{otherNombre}</strong> quiere chatear contigo:</div>
+                  <div style={{ background:"var(--navy3)", borderRadius:8, padding:"8px 12px", fontSize:"0.85rem", color:"var(--text2)", marginBottom:12 }}>{pendingRequest.content}</div>
+                  <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+                    <button onClick={acceptRequest} style={{ padding:"8px 20px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, cursor:"pointer" }}>✅ Aceptar</button>
+                    <button onClick={rejectRequest} style={{ padding:"8px 20px", background:"rgba(255,107,107,0.15)", border:"1px solid rgba(255,107,107,0.3)", borderRadius:8, color:"var(--coral)", fontWeight:700, cursor:"pointer" }}>❌ Rechazar</button>
                   </div>
-                  <div style={{ fontSize:"0.68rem", color:"var(--text3)", marginTop:3, textAlign: m.from_user_id === myUser.id ? "right" : "left" }}>{timeAgo(m.created_at)}</div>
                 </div>
-              </div>
-            ))
-          }
+              )}
+              {messages.filter(m => !m.is_request || m.accepted || m.from_user_id === myUser.id).length === 0 && !pendingRequest ? (
+                <div style={{ textAlign:"center", color:"var(--text3)", padding:40 }}>
+                  <div style={{ fontSize:"2rem", marginBottom:8 }}>👋</div>
+                  <div>¡Conectaste con {otherNombre}!</div>
+                  <div style={{ fontSize:"0.78rem", marginTop:8, color:"var(--amber)" }}>Envía un mensaje — el otro debe aceptar para continuar la conversación</div>
+                </div>
+              ) : messages.filter(m => chatAccepted || m.accepted || (!m.is_request)).map((m, i) => (
+                <div key={i} style={{ display:"flex", gap:8, flexDirection: m.from_user_id === myUser.id ? "row-reverse" : "row" }}>
+                  <Avatar name={m.from_user_name} color={randomColor(m.from_user_name)} size={30} imageUrl={m.from_avatar_url} />
+                  <div style={{ maxWidth:"70%" }}>
+                    <div style={{ background: m.from_user_id === myUser.id ? "rgba(78,205,196,0.2)" : "var(--card2)", borderRadius:10, padding:"8px 12px" }}>
+                      <div style={{ fontSize:"0.85rem", color:"var(--text)", lineHeight:1.5 }}>{m.content}</div>
+                    </div>
+                    <div style={{ fontSize:"0.68rem", color:"var(--text3)", marginTop:3, textAlign: m.from_user_id === myUser.id ? "right" : "left" }}>{timeAgo(m.created_at)}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
         <div style={{ padding:"12px 16px", borderTop:"1px solid var(--border)", display:"flex", gap:8 }}>
-          <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key==="Enter" && sendMessage()}
-            placeholder={"Mensaje a " + otherNombre + "..."}
-            style={{ flex:1, padding:"9px 12px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.85rem", outline:"none", fontFamily:"DM Sans" }} />
-          <button onClick={sendMessage} style={{ padding:"9px 16px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, cursor:"pointer" }}>→</button>
+          {!chatAccepted && !hasSentRequest && !pendingRequest ? (
+            <>
+              <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key==="Enter" && sendRequest()}
+                placeholder="Escribe un mensaje de presentación..."
+                style={{ flex:1, padding:"9px 12px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.85rem", outline:"none", fontFamily:"DM Sans" }} />
+              <button onClick={sendRequest} style={{ padding:"9px 16px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, cursor:"pointer" }}>Enviar →</button>
+            </>
+          ) : hasSentRequest && !chatAccepted ? (
+            <div style={{ flex:1, textAlign:"center", color:"var(--text3)", fontSize:"0.85rem", padding:"9px 0" }}>⏳ Esperando que {otherNombre} acepte tu solicitud...</div>
+          ) : chatAccepted ? (
+            <>
+              <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key==="Enter" && sendMessage()}
+                placeholder={"Mensaje a " + otherNombre + "..."}
+                style={{ flex:1, padding:"9px 12px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.85rem", outline:"none", fontFamily:"DM Sans" }} />
+              <button onClick={sendMessage} style={{ padding:"9px 16px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, cursor:"pointer" }}>→</button>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1233,7 +1300,7 @@ function DirectMessageChat({ myUser, otherUser, onClose }) {
 }
 
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
-function NotificationsPanel({ user, onClose }) {
+function NotificationsPanel({ user, onClose, onOpenDM }) {
   const [notifs, setNotifs] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1261,11 +1328,11 @@ function NotificationsPanel({ user, onClose }) {
           {loading ? <div style={{ textAlign:"center", padding:40, color:"var(--text3)" }}>Cargando...</div> :
             notifs.length === 0 ? <div style={{ textAlign:"center", padding:40, color:"var(--text3)" }}>No tienes notificaciones aún</div> :
             notifs.map(n => (
-              <div key={n.id} style={{ padding:"12px 20px", borderBottom:"1px solid var(--border)", background: n.read ? "transparent" : "rgba(78,205,196,0.05)", display:"flex", gap:10, alignItems:"flex-start" }}>
+              <div key={n.id} onClick={() => n.from_user_id && onOpenDM && onOpenDM(n.from_user_id)} style={{ padding:"12px 20px", borderBottom:"1px solid var(--border)", background: n.read ? "transparent" : "rgba(78,205,196,0.05)", display:"flex", gap:10, alignItems:"flex-start", cursor: n.from_user_id ? "pointer" : "default" }}>
                 <div style={{ fontSize:"1.2rem", marginTop:2 }}>{icons[n.type] || "📢"}</div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:"0.85rem", color:"var(--text)", lineHeight:1.5 }}>{n.message}</div>
-                  <div style={{ fontSize:"0.72rem", color:"var(--text3)", marginTop:4 }}>{timeAgo(n.created_at)}</div>
+                  <div style={{ fontSize:"0.72rem", color:"var(--text3)", marginTop:4 }}>{timeAgo(n.created_at)}{n.from_user_id && " · Toca para responder"}</div>
                 </div>
                 {!n.read && <div style={{ width:8, height:8, borderRadius:"50%", background:"var(--mint)", flexShrink:0, marginTop:6 }} />}
               </div>
