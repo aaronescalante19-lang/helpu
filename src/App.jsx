@@ -508,7 +508,7 @@ function MarketView({ user, onToast }) {
 
   async function loadProducts() {
     setLoading(true);
-    const { data } = await supabase.from("products").select("*").eq("type", tab).order("created_at", { ascending: false });
+    const { data } = await supabase.from("products").select("*").eq("type", tab).eq("vendido", false).order("created_at", { ascending: false });
     if (data) setProducts(data);
     setLoading(false);
   }
@@ -577,18 +577,28 @@ function MarketView({ user, onToast }) {
                   <div className="product-price">S/ {p.price}</div>
                   <div style={{ fontSize:"0.72rem", color:"var(--text3)" }}>{p.seller_name}</div>
                 </div>
-                <button className="buy-btn" onClick={async () => {
-                  onToast("🔒 Contactando al vendedor...");
-                  if (p.user_id && user?.id !== p.user_id) {
-                    await supabase.from("notifications").insert({
-                      user_id: p.user_id,
-                      type: "compra",
-                      message: "🛒 " + (user?.user_metadata?.nombre || "Alguien") + " está interesado en tu producto: " + p.name,
-                      from_user_id: user?.id,
-                      from_user_name: user?.user_metadata?.nombre || "Usuario"
-                    });
-                  }
-                }}>🔒 Comprar Seguro</button>
+                {user?.id === p.user_id ? (
+                  <button onClick={async () => {
+                    await supabase.from("products").update({ vendido: true }).eq("id", p.id);
+                    loadProducts();
+                    onToast("✅ Producto marcado como vendido");
+                  }} style={{ width:"100%", marginTop:10, padding:8, background:"rgba(255,179,71,0.15)", border:"1px solid rgba(255,179,71,0.3)", borderRadius:8, color:"var(--amber)", fontWeight:700, fontSize:"0.8rem", cursor:"pointer" }}>
+                    ✅ Marcar como vendido
+                  </button>
+                ) : (
+                  <button className="buy-btn" onClick={async () => {
+                    onToast("🔒 Contactando al vendedor...");
+                    if (p.user_id && user?.id !== p.user_id) {
+                      await supabase.from("notifications").insert({
+                        user_id: p.user_id,
+                        type: "compra",
+                        message: "🛒 " + (user?.user_metadata?.nombre || "Alguien") + " está interesado en tu producto: " + p.name,
+                        from_user_id: user?.id,
+                        from_user_name: user?.user_metadata?.nombre || "Usuario"
+                      });
+                    }
+                  }}>🔒 Comprar Seguro</button>
+                )}
               </div>
             </div>
           ))}
