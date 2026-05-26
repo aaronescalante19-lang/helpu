@@ -499,7 +499,13 @@ function ProductChat({ product, user, onClose }) {
   const [loading, setLoading] = useState(true);
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
 
-  useEffect(() => { loadMessages(); }, []);
+  useEffect(() => { 
+    loadMessages();
+    const channel = supabase.channel("product_chat_" + product.id)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "product_chats", filter: "product_id=eq." + product.id }, loadMessages)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
 
   async function loadMessages() {
     const { data } = await supabase.from("product_chats").select("*").eq("product_id", product.id).order("created_at");
@@ -656,13 +662,18 @@ function MarketView({ user, onToast }) {
                   <div style={{ fontSize:"0.72rem", color:"var(--text3)" }}>{p.seller_name}</div>
                 </div>
                 {user?.id === p.user_id ? (
-                  <button onClick={async () => {
-                    await supabase.from("products").update({ vendido: true }).eq("id", p.id);
-                    loadProducts();
-                    onToast("✅ Producto marcado como vendido");
-                  }} style={{ width:"100%", marginTop:10, padding:8, background:"rgba(255,179,71,0.15)", border:"1px solid rgba(255,179,71,0.3)", borderRadius:8, color:"var(--amber)", fontWeight:700, fontSize:"0.8rem", cursor:"pointer" }}>
-                    ✅ Marcar como vendido
-                  </button>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:10 }}>
+                    <button onClick={() => setSelectedProduct(p)} style={{ width:"100%", padding:8, background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.2)", borderRadius:8, color:"var(--mint)", fontWeight:700, fontSize:"0.8rem", cursor:"pointer" }}>
+                      💬 Ver mensajes
+                    </button>
+                    <button onClick={async () => {
+                      await supabase.from("products").update({ vendido: true }).eq("id", p.id);
+                      loadProducts();
+                      onToast("✅ Producto marcado como vendido");
+                    }} style={{ width:"100%", padding:8, background:"rgba(255,179,71,0.15)", border:"1px solid rgba(255,179,71,0.3)", borderRadius:8, color:"var(--amber)", fontWeight:700, fontSize:"0.8rem", cursor:"pointer" }}>
+                      ✅ Marcar como vendido
+                    </button>
+                  </div>
                 ) : (
                   <button className="buy-btn" onClick={() => setSelectedProduct(p)}>
                     💬 Contactar vendedor
@@ -692,6 +703,14 @@ function EventForum({ eventId, eventTitle, user, onOpen }) {
     const { data } = await supabase.from("event_comments").select("*").eq("event_id", eventId).order("created_at");
     if (data) setComments(data);
   }
+
+  useEffect(() => {
+    if (!open) return;
+    const channel = supabase.channel("event_forum_" + eventId)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "event_comments", filter: "event_id=eq." + eventId }, loadComments)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [open]);
 
   async function sendComment() {
     if (!text.trim()) return;
