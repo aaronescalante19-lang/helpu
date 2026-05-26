@@ -599,6 +599,7 @@ function MarketView({ user, onToast }) {
   }
 
   return (
+    <>
     <div style={{ flex: 1 }}>
       <div className="page-header">
         <div className="section-title">Mercado Universitario</div>
@@ -673,7 +674,8 @@ function MarketView({ user, onToast }) {
         </div>
       }
     </div>
-      {selectedProduct && <ProductChat product={selectedProduct} user={user} onClose={() => setSelectedProduct(null)} />}
+    {selectedProduct && <ProductChat product={selectedProduct} user={user} onClose={() => setSelectedProduct(null)} />}
+    </>
   );
 }
 
