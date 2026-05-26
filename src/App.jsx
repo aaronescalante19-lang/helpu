@@ -492,6 +492,82 @@ function PostCard({ post, user, onUpdate }) {
   );
 }
 
+
+function ProductChat({ product, user, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
+
+  useEffect(() => { loadMessages(); }, []);
+
+  async function loadMessages() {
+    const { data } = await supabase.from("product_chats").select("*").eq("product_id", product.id).order("created_at");
+    if (data) setMessages(data);
+    setLoading(false);
+  }
+
+  async function sendMessage() {
+    if (!text.trim()) return;
+    const { data: profile } = await supabase.from("profiles").select("avatar_url").eq("user_id", user.id).single();
+    await supabase.from("product_chats").insert({
+      product_id: product.id, user_id: user.id, user_name: nombre,
+      avatar_url: profile?.avatar_url || null, content: text
+    });
+    // Notify seller if buyer is writing
+    if (product.user_id && product.user_id !== user.id) {
+      await supabase.from("notifications").insert({
+        user_id: product.user_id, type: "compra",
+        message: "💬 " + nombre + " escribió sobre tu producto: " + product.name,
+        from_user_id: user.id, from_user_name: nombre
+      });
+    }
+    setText("");
+    loadMessages();
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:20, width:"100%", maxWidth:460, maxHeight:"85vh", display:"flex", flexDirection:"column" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1rem", color:"var(--text)" }}>💬 Chat del producto</div>
+            <div style={{ fontSize:"0.78rem", color:"var(--text3)" }}>{product.name} · S/ {product.price}</div>
+          </div>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:"1.2rem" }}>✕</button>
+        </div>
+        <div style={{ flex:1, overflow:"auto", padding:16, display:"flex", flexDirection:"column", gap:10 }}>
+          {loading ? <div style={{ textAlign:"center", color:"var(--text3)" }}>Cargando...</div> :
+            messages.length === 0 ? (
+              <div style={{ textAlign:"center", color:"var(--text3)", padding:40 }}>
+                <div style={{ fontSize:"2rem", marginBottom:8 }}>👋</div>
+                <div>Inicia la conversación con el vendedor</div>
+                <div style={{ fontSize:"0.78rem", marginTop:8 }}>Puedes dejar tu número de WhatsApp para coordinar</div>
+              </div>
+            ) : messages.map((m, i) => (
+              <div key={i} style={{ display:"flex", gap:8, flexDirection: m.user_id === user.id ? "row-reverse" : "row" }}>
+                <Avatar name={m.user_name} color={randomColor(m.user_name)} size={30} imageUrl={m.avatar_url} />
+                <div style={{ maxWidth:"70%" }}>
+                  <div style={{ fontSize:"0.72rem", color:"var(--text3)", marginBottom:3, textAlign: m.user_id === user.id ? "right" : "left" }}>{m.user_name}</div>
+                  <div style={{ background: m.user_id === user.id ? "rgba(78,205,196,0.2)" : "var(--card2)", borderRadius:10, padding:"8px 12px" }}>
+                    <div style={{ fontSize:"0.85rem", color:"var(--text)", lineHeight:1.5 }}>{m.content}</div>
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+        <div style={{ padding:"12px 16px", borderTop:"1px solid var(--border)", display:"flex", gap:8 }}>
+          <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key==="Enter" && sendMessage()}
+            placeholder="Escribe tu mensaje... (ej: Mi número es 999...)"
+            style={{ flex:1, padding:"9px 12px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.85rem", outline:"none", fontFamily:"DM Sans" }} />
+          <button onClick={sendMessage} style={{ padding:"9px 16px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, cursor:"pointer" }}>→</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MARKET ───────────────────────────────────────────────────────────────────
 const emojis = { "Tecnología":"💻","Libros":"📚","Accesorios":"🎒","Arte":"🎨","Servicio":"⏰","Diseño":"🎨","Comida":"🍰","Otro":"📦" };
 
@@ -502,6 +578,7 @@ function MarketView({ user, onToast }) {
   const [name, setName] = useState(""); const [price, setPrice] = useState(""); const [tag, setTag] = useState("Otro");
   const [productImg, setProductImg] = useState("");
   const [uploadingProduct, setUploadingProduct] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
 
   useEffect(() => { loadProducts(); }, [tab]);
@@ -586,18 +663,9 @@ function MarketView({ user, onToast }) {
                     ✅ Marcar como vendido
                   </button>
                 ) : (
-                  <button className="buy-btn" onClick={async () => {
-                    onToast("🔒 Contactando al vendedor...");
-                    if (p.user_id && user?.id !== p.user_id) {
-                      await supabase.from("notifications").insert({
-                        user_id: p.user_id,
-                        type: "compra",
-                        message: "🛒 " + (user?.user_metadata?.nombre || "Alguien") + " está interesado en tu producto: " + p.name,
-                        from_user_id: user?.id,
-                        from_user_name: user?.user_metadata?.nombre || "Usuario"
-                      });
-                    }
-                  }}>🔒 Comprar Seguro</button>
+                  <button className="buy-btn" onClick={() => setSelectedProduct(p)}>
+                    💬 Contactar vendedor
+                  </button>
                 )}
               </div>
             </div>
@@ -605,6 +673,7 @@ function MarketView({ user, onToast }) {
         </div>
       }
     </div>
+      {selectedProduct && <ProductChat product={selectedProduct} user={user} onClose={() => setSelectedProduct(null)} />}
   );
 }
 
