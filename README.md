@@ -106,3 +106,4 @@ Desarrollado con ❤️ para estudiantes universitarios en Lima, Perú.
 ## 📄 Licencia
 
 MIT — libre para usar y modificar.
+# updated
