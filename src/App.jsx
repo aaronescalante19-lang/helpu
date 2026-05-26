@@ -14,6 +14,22 @@ const css = `
   }
   body { background: var(--navy); color: var(--text); font-family: 'DM Sans', sans-serif; }
 
+  /* MOBILE NAV */
+  .mobile-nav {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(15,27,45,0.98); backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding: 8px 0 env(safe-area-inset-bottom, 8px);
+  }
+  .mobile-nav-inner { display: flex; justify-content: space-around; align-items: center; }
+  .mobile-nav-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 16px;
+    background: transparent; border: none; color: var(--text3); cursor: pointer; font-family: 'DM Sans', sans-serif; }
+  .mobile-nav-btn.active { color: var(--mint); }
+  .mobile-nav-btn span { font-size: 1.3rem; }
+  .mobile-nav-btn small { font-size: 0.65rem; font-weight: 500; }
+  @media(max-width:900px){ .mobile-nav{display:block} .main-layout{padding-bottom:70px} }
+
   /* LOGIN */
   .login-root { min-height:100vh; display:flex; align-items:center; justify-content:center;
     background: radial-gradient(ellipse at 30% 20%, rgba(78,205,196,0.15) 0%, transparent 50%),
@@ -202,7 +218,33 @@ const css = `
   .stat-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:0.9rem; }
   .stat-val { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.95rem; color:var(--text); }
   .stat-lbl { font-size:0.72rem; color:var(--text3); }
-  @media(max-width:900px){ .sidebar,.right-panel{display:none} .main-layout{padding:16px} }
+  @media(max-width:900px){
+    .sidebar,.right-panel{display:none}
+    .main-layout{padding:12px}
+    .nav-logo{font-size:1.1rem}
+    .nav-links{gap:2px}
+    .nav-link{padding:6px 10px;font-size:0.78rem}
+    .nav-right{gap:8px}
+    .logout-btn{display:none}
+    .feed-area{gap:12px}
+    .post-create{padding:12px}
+    .events-grid{grid-template-columns:1fr}
+    .products-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+    .buddy-card-big{max-width:100%}
+    .buddies-full{padding:12px}
+  }
+  @media(max-width:600px){
+    .navbar{padding:0 12px;height:54px}
+    .nav-links{display:none}
+    .nav-logo{font-size:1.2rem}
+    .main-layout{padding:10px}
+    .post-card{border-radius:12px}
+    .event-card{border-radius:12px}
+    .products-grid{grid-template-columns:repeat(2,1fr)}
+    .buddy-card-header{height:160px}
+    .buddy-card-name{font-size:1.3rem}
+    .section-title{font-size:1.1rem}
+  }
 `;
 
 // ─── AVATAR ───────────────────────────────────────────────────────────────────
@@ -1212,6 +1254,20 @@ export default function App() {
       {dmUser && <DirectMessageChat myUser={user} otherUser={dmUser} onClose={() => setDmUser(null)} />}
       {showProfile && <ProfileView user={user} onClose={() => setShowProfile(false)} />}
       {toast && <div className="toast">{toast}</div>}
+      <div className="mobile-nav">
+        <div className="mobile-nav-inner">
+          {[{id:"muro",icon:"🏠",label:"Inicio"},{id:"mercado",icon:"🛒",label:"Mercado"},{id:"eventos",icon:"🎉",label:"Eventos"},{id:"buddies",icon:"🤝",label:"Comunidad"}].map(l => (
+            <button key={l.id} className={"mobile-nav-btn" + (tab===l.id ? " active" : "")} onClick={() => setTab(l.id)}>
+              <span>{l.icon}</span>
+              <small>{l.label}</small>
+            </button>
+          ))}
+          <button className="mobile-nav-btn" onClick={() => setShowNotifs(true)}>
+            <span style={{position:"relative"}}>🔔{unreadCount > 0 && <span style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"var(--coral)",fontSize:"0.55rem",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:700}}>{unreadCount}</span>}</span>
+            <small>Notis</small>
+          </button>
+        </div>
+      </div>
     </>
   );
 }
