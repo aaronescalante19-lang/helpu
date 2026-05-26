@@ -1067,6 +1067,98 @@ function ConversationsList({ user, onOpenChat }) {
   );
 }
 
+
+function MobileProfilePanel({ user, onClose, onOpenChat, onViewBuddies, onViewEventos }) {
+  const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
+  const uni = user?.user_metadata?.universidad || "";
+  const [stats, setStats] = useState({ posts: 0, diasActivo: 1 });
+  const [descripcion, setDescripcion] = useState("");
+  const [convos, setConvos] = useState([]);
+
+  useEffect(() => {
+    async function load() {
+      const { count } = await supabase.from("posts").select("*", { count:"exact", head:true }).eq("user_id", user.id);
+      const { data: profile } = await supabase.from("profiles").select("descripcion, created_at").eq("user_id", user.id).single();
+      const dias = profile?.created_at ? Math.max(1, Math.floor((Date.now() - new Date(profile.created_at)) / 86400000)) : 1;
+      setStats({ posts: count || 0, diasActivo: dias });
+      setDescripcion(profile?.descripcion || "");
+      // Load conversations
+      const { data: msgs } = await supabase.from("direct_messages").select("*")
+        .or("from_user_id.eq." + user.id + ",to_user_id.eq." + user.id)
+        .eq("accepted", true).order("created_at", { ascending: false });
+      if (msgs) {
+        const seen = new Set();
+        const unique = [];
+        for (const m of msgs) {
+          const otherId = m.from_user_id === user.id ? m.to_user_id : m.from_user_id;
+          if (!seen.has(otherId)) { seen.add(otherId); unique.push({ ...m, otherId }); }
+        }
+        const profiles = await Promise.all(unique.slice(0,5).map(async (c) => {
+          const { data: p } = await supabase.from("profiles").select("*").eq("user_id", c.otherId).single();
+          return { ...c, profile: p };
+        }));
+        setConvos(profiles.filter(c => c.profile));
+      }
+    }
+    load();
+  }, []);
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"var(--navy)", zIndex:150, overflow:"auto" }}>
+      <div style={{ padding:"16px 16px 80px" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+          <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1.2rem", color:"var(--text)" }}>Mi Perfil</div>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:"1.5rem" }}>✕</button>
+        </div>
+        {/* Profile card */}
+        <div className="card" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, marginBottom:16 }}>
+          <AvatarWithFetch userId={user?.id} name={nombre} size={64} />
+          <div style={{ fontWeight:700, fontSize:"1rem" }}>{nombre}</div>
+          <div style={{ fontSize:"0.78rem", color:"var(--text3)" }}>{uni}</div>
+          {descripcion && <div style={{ fontSize:"0.78rem", color:"var(--text2)", textAlign:"center", lineHeight:1.5 }}>{descripcion}</div>}
+        </div>
+        {/* Stats */}
+        <div className="card" style={{ marginBottom:16 }}>
+          <div className="card-title">Tu red</div>
+          {[
+            ["🔥","#FF6B6B","rgba(255,107,107,0.1)", stats.diasActivo, "Días en Help U"],
+            ["📝","#4ECDC4","rgba(78,205,196,0.1)", stats.posts, "Posts publicados"],
+          ].map(([icon,clr,bg,val,lbl]) => (
+            <div className="stat-item" key={lbl}>
+              <div className="stat-icon" style={{ background:bg, color:clr }}>{icon}</div>
+              <div style={{ flex:1 }}>
+                <div className="stat-val">{val}</div>
+                <div className="stat-lbl">{lbl}</div>
+              </div>
+            </div>
+          ))}
+          <button onClick={() => { onViewBuddies(); onClose(); }} style={{ width:"100%", marginTop:12, padding:"9px", background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.2)", borderRadius:8, color:"var(--mint)", fontWeight:600, fontSize:"0.83rem", cursor:"pointer" }}>
+            Ver Buddies →
+          </button>
+        </div>
+        {/* Conversations */}
+        {convos.length > 0 && (
+          <div className="card">
+            <div className="card-title">💬 Mis conversaciones</div>
+            {convos.map((c, i) => {
+              const nombre2 = c.profile?.nombre || "Buddy";
+              return (
+                <div key={i} onClick={() => { onOpenChat(c.profile); onClose(); }} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:"1px solid var(--border)", cursor:"pointer" }}>
+                  <Avatar name={nombre2} color={randomColor(nombre2)} size={36} imageUrl={c.profile?.avatar_url} />
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:"0.85rem", color:"var(--text)" }}>{nombre2}</div>
+                    <div style={{ fontSize:"0.72rem", color:"var(--text3)" }}>{c.content?.slice(0, 25)}...</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 function Sidebar({ user, onViewBuddies, onViewEventos, onOpenChat }) {
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
@@ -1132,6 +1224,7 @@ export default function App() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dmUser, setDmUser] = useState(null);
+  const [showMobileProfile, setShowMobileProfile] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -1252,6 +1345,7 @@ export default function App() {
       {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
       {showNotifs && <NotificationsPanel user={user} onClose={() => setShowNotifs(false)} onOpenDM={async (fromUserId) => { const { data } = await supabase.from("profiles").select("*").eq("user_id", fromUserId).single(); if (data) { setDmUser(data); setShowNotifs(false); } }} />}
       {dmUser && <DirectMessageChat myUser={user} otherUser={dmUser} onClose={() => setDmUser(null)} />}
+      {showMobileProfile && <MobileProfilePanel user={user} onClose={() => setShowMobileProfile(false)} onOpenChat={(p) => { setDmUser(p); setShowMobileProfile(false); }} onViewBuddies={() => setTab("buddies")} onViewEventos={() => setTab("eventos")} />}
       {showProfile && <ProfileView user={user} onClose={() => setShowProfile(false)} />}
       {toast && <div className="toast">{toast}</div>}
       <div className="mobile-nav">
@@ -1265,6 +1359,10 @@ export default function App() {
           <button className="mobile-nav-btn" onClick={() => setShowNotifs(true)}>
             <span style={{position:"relative"}}>🔔{unreadCount > 0 && <span style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"var(--coral)",fontSize:"0.55rem",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:700}}>{unreadCount}</span>}</span>
             <small>Notis</small>
+          </button>
+          <button className="mobile-nav-btn" onClick={() => setShowMobileProfile(true)}>
+            <span>👤</span>
+            <small>Mi perfil</small>
           </button>
         </div>
       </div>
