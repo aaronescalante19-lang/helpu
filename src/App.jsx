@@ -878,7 +878,7 @@ function BuddiesView({ user }) {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from("profiles").select("*").neq("user_id", user.id).limit(20);
+      const { data } = await supabase.from("profiles").select("*").neq("user_id", user.id).eq("status", "aprobado").limit(20);
       if (data && data.length > 0) setProfiles(data);
       setLoading(false);
     }
