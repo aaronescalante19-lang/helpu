@@ -431,7 +431,7 @@ function PostCard({ post, user, onUpdate }) {
       await supabase.from("notifications").insert({
         user_id: post.user_id,
         type: "comentario",
-        message: "💬 " + nombre + " comentó tu post: "" + newComment.slice(0, 40) + (newComment.length > 40 ? "..." : "") + """,
+        message: "💬 " + nombre + " comentó tu post: " + newComment.slice(0, 40) + (newComment.length > 40 ? "..." : ""),
         from_user_id: user.id,
         from_user_name: nombre
       });
@@ -1016,6 +1016,10 @@ export default function App() {
           </div>
           <div className="nav-right">
             <div onClick={() => setShowProfile(true)} style={{ cursor:"pointer" }}><AvatarWithFetch userId={user?.id} name={nombre} size={34} /></div>
+            <button onClick={() => { setShowNotifs(true); setUnreadCount(0); }} style={{ position:"relative", width:34, height:34, borderRadius:8, background:"var(--card)", border:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:"1rem" }}>
+              🔔
+              {unreadCount > 0 && <div style={{ position:"absolute", top:4, right:4, width:16, height:16, borderRadius:"50%", background:"var(--coral)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.6rem", fontWeight:700, color:"white" }}>{unreadCount}</div>}
+            </button>
             {isAdmin && <button onClick={() => setShowAdmin(true)} style={{ padding:"6px 12px", background:"rgba(167,139,250,0.15)", border:"1px solid rgba(167,139,250,0.3)", borderRadius:8, color:"var(--purple)", fontWeight:700, fontSize:"0.78rem", cursor:"pointer" }}>🛡️ Admin</button>}
             <button className="logout-btn" onClick={logout}>Salir</button>
           </div>
