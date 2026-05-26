@@ -341,6 +341,8 @@ function FeedView({ user }) {
 
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
   const uni = user?.user_metadata?.universidad || "";
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploadingImg, setUploadingImg] = useState(false);
 
   useEffect(() => {
     loadPosts();
@@ -358,8 +360,9 @@ function FeedView({ user }) {
   async function publish() {
     if (!text.trim()) return;
     setPublishing(true);
-    await supabase.from("posts").insert({ content: text, user_name: nombre, universidad: uni, user_id: user.id });
+    await supabase.from("posts").insert({ content: text, user_name: nombre, universidad: uni, user_id: user.id, image_url: imageUrl || null });
     setText("");
+    setImageUrl("");
     setPublishing(false);
   }
 
@@ -371,7 +374,23 @@ function FeedView({ user }) {
           <textarea className="post-textarea" placeholder="¿Qué está pasando? Comparte con la comunidad..."
             value={text} onChange={e => setText(e.target.value)} rows={2} />
         </div>
+        {imageUrl && <img src={imageUrl} alt="preview" style={{ width:"100%", maxHeight:200, objectFit:"cover", borderRadius:10, marginTop:10 }} />}
         <div className="post-actions">
+          <label style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", background:"var(--card2)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text2)", fontSize:"0.8rem", cursor:"pointer" }}>
+            {uploadingImg ? "Subiendo..." : "📷 Foto"}
+            <input type="file" accept="image/*" style={{ display:"none" }} onChange={async (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              setUploadingImg(true);
+              const path = "posts/" + Date.now() + "." + file.name.split(".").pop();
+              const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+              if (!error) {
+                const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+                setImageUrl(data.publicUrl);
+              }
+              setUploadingImg(false);
+            }} disabled={uploadingImg} />
+          </label>
           <button className="post-publish-btn" onClick={publish} disabled={publishing || !text.trim()}>
             {publishing ? "Publicando..." : "Publicar"}
           </button>
@@ -433,6 +452,7 @@ function PostCard({ post, user, onUpdate }) {
         </div>
       </div>
       <div className="post-body">{post.content}</div>
+      {post.image_url && <img src={post.image_url} alt="post" style={{ width:"100%", maxHeight:300, objectFit:"cover" }} />}
       <div className="post-footer">
         <button className={`post-btn${liked ? " liked" : ""}`} onClick={handleLike}>
           {liked ? "❤️" : "🤍"} {likes}
@@ -471,6 +491,8 @@ function MarketView({ user, onToast }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState(""); const [price, setPrice] = useState(""); const [tag, setTag] = useState("Otro");
+  const [productImg, setProductImg] = useState("");
+  const [uploadingProduct, setUploadingProduct] = useState(false);
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
 
   useEffect(() => { loadProducts(); }, [tab]);
@@ -484,8 +506,8 @@ function MarketView({ user, onToast }) {
 
   async function addProduct() {
     if (!name.trim() || !price) return;
-    await supabase.from("products").insert({ name, price: parseFloat(price), tag, type: tab, seller_name: nombre, user_id: user.id });
-    setName(""); setPrice(""); setTag("Otro");
+    await supabase.from("products").insert({ name, price: parseFloat(price), tag, type: tab, seller_name: nombre, user_id: user.id, image_url: productImg || null });
+    setName(""); setPrice(""); setTag("Otro"); setProductImg("");
     loadProducts();
     onToast("✅ Producto publicado");
   }
@@ -506,11 +528,29 @@ function MarketView({ user, onToast }) {
           <input className="form-input" placeholder="Nombre del producto" value={name} onChange={e => setName(e.target.value)} />
           <input className="form-input" placeholder="Precio (S/)" type="number" value={price} onChange={e => setPrice(e.target.value)} />
         </div>
-        <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+        <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:10 }}>
           <select className="form-input" style={{ flex:1 }} value={tag} onChange={e => setTag(e.target.value)}>
             {Object.keys(emojis).map(k => <option key={k}>{k}</option>)}
           </select>
-          <button className="form-submit" onClick={addProduct}>Publicar</button>
+        </div>
+        {productImg && <img src={productImg} alt="preview" style={{ width:"100%", height:120, objectFit:"cover", borderRadius:8, marginBottom:10 }} />}
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <label style={{ display:"flex", alignItems:"center", gap:5, padding:"9px 14px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text2)", fontSize:"0.83rem", cursor:"pointer" }}>
+            {uploadingProduct ? "Subiendo..." : "📷 Foto"}
+            <input type="file" accept="image/*" style={{ display:"none" }} onChange={async (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              setUploadingProduct(true);
+              const path = "products/" + Date.now() + "." + file.name.split(".").pop();
+              const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+              if (!error) {
+                const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+                setProductImg(data.publicUrl);
+              }
+              setUploadingProduct(false);
+            }} disabled={uploadingProduct} />
+          </label>
+          <button className="form-submit" onClick={addProduct} style={{ flex:1 }}>Publicar</button>
         </div>
       </div>
       {loading ? <div className="loading">Cargando productos...</div> :
@@ -518,7 +558,9 @@ function MarketView({ user, onToast }) {
         <div className="products-grid">
           {products.map(p => (
             <div className="product-card" key={p.id}>
-              <div className="product-img">{emojis[p.tag] || "📦"}</div>
+              <div className="product-img" style={{ padding:0, overflow:"hidden" }}>
+                {p.image_url ? <img src={p.image_url} alt={p.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : emojis[p.tag] || "📦"}
+              </div>
               <div className="product-body">
                 <div className="product-tag">{p.tag}</div>
                 <div className="product-name">{p.name}</div>
@@ -783,6 +825,8 @@ function AvatarWithFetch({ userId, name, size = 40 }) {
 function Sidebar({ user, onViewBuddies, onViewEventos }) {
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
   const uni = user?.user_metadata?.universidad || "";
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploadingImg, setUploadingImg] = useState(false);
   const [stats, setStats] = useState({ posts: 0, diasActivo: 1 });
   const [descripcion, setDescripcion] = useState("");
 
@@ -832,10 +876,7 @@ function Sidebar({ user, onViewBuddies, onViewEventos }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(() => {
-    const saved = localStorage.getItem("helpu_tab");
-    return saved || "muro";
-  });
+  const [tab, setTab] = useState("muro");
   const [toast, setToast] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -877,11 +918,7 @@ export default function App() {
       }
     }
   }
-useEffect(() => {
-    localStorage.setItem("helpu_tab", tab);
-  }, [tab]);
 
-  function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
 
   async function logout() { await supabase.auth.signOut(); setUser(null); }
