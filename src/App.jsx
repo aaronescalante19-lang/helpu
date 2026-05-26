@@ -874,6 +874,7 @@ function BuddiesView({ user }) {
   const [idx, setIdx] = useState(0);
   const [connected, setConnected] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [selectedBuddy, setSelectedBuddy] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -926,7 +927,7 @@ function BuddiesView({ user }) {
           <div className="buddy-actions">
             <button className="buddy-pass" onClick={() => setIdx(i => i + 1)}>✕</button>
             <button className="buddy-connect" onClick={async () => {
-          setConnected(c => c+1); setIdx(i => i+1);
+          setConnected(c => c+1);
           if (buddy.user_id) {
             await supabase.from("notifications").insert({
               user_id: buddy.user_id,
@@ -935,12 +936,16 @@ function BuddiesView({ user }) {
               from_user_id: user?.id,
               from_user_name: user?.user_metadata?.nombre || "Usuario"
             });
+            setSelectedBuddy(buddy);
+          } else {
+            setIdx(i => i+1);
           }
         }}>Conectar 🤝</button>
           </div>
         </div>
       </div>
       <div className="buddy-counter">{connected} conexiones nuevas hoy</div>
+      {selectedBuddy && <DirectMessageChat myUser={user} otherUser={selectedBuddy} onClose={() => { setSelectedBuddy(null); setIdx(i => i+1); }} />}
     </div>
   );
 }
@@ -1141,6 +1146,91 @@ export default function App() {
 }
 
 
+
+
+// ─── DIRECT MESSAGES ──────────────────────────────────────────────────────────
+function DirectMessageChat({ myUser, otherUser, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const myNombre = myUser?.user_metadata?.nombre || myUser?.email?.split("@")[0] || "Usuario";
+  const otherNombre = otherUser?.nombre || otherUser?.name || "Buddy";
+
+  useEffect(() => {
+    loadMessages();
+    const channel = supabase.channel("dm_" + [myUser.id, otherUser.user_id].sort().join("_"))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages" }, loadMessages)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function loadMessages() {
+    const { data } = await supabase.from("direct_messages").select("*")
+      .or("and(from_user_id.eq." + myUser.id + ",to_user_id.eq." + otherUser.user_id + "),and(from_user_id.eq." + otherUser.user_id + ",to_user_id.eq." + myUser.id + ")")
+      .order("created_at");
+    if (data) setMessages(data);
+    setLoading(false);
+    // Mark as read
+    await supabase.from("direct_messages").update({ read: true }).eq("to_user_id", myUser.id).eq("from_user_id", otherUser.user_id).eq("read", false);
+  }
+
+  async function sendMessage() {
+    if (!text.trim()) return;
+    const { data: profile } = await supabase.from("profiles").select("avatar_url").eq("user_id", myUser.id).single();
+    await supabase.from("direct_messages").insert({
+      from_user_id: myUser.id, to_user_id: otherUser.user_id,
+      from_user_name: myNombre, from_avatar_url: profile?.avatar_url || null, content: text
+    });
+    await supabase.from("notifications").insert({
+      user_id: otherUser.user_id, type: "buddy",
+      message: "💬 " + myNombre + " te envió un mensaje: " + text.slice(0, 40),
+      from_user_id: myUser.id, from_user_name: myNombre
+    });
+    setText("");
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:20, width:"100%", maxWidth:460, maxHeight:"85vh", display:"flex", flexDirection:"column" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
+          <Avatar name={otherNombre} color={randomColor(otherNombre)} size={36} imageUrl={otherUser?.avatar_url} />
+          <div style={{ flex:1 }}>
+            <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1rem", color:"var(--text)" }}>{otherNombre}</div>
+            <div style={{ fontSize:"0.75rem", color:"var(--mint)" }}>{otherUser?.universidad || ""}</div>
+          </div>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:"1.2rem" }}>✕</button>
+        </div>
+        <div style={{ flex:1, overflow:"auto", padding:16, display:"flex", flexDirection:"column", gap:10 }}>
+          {loading ? <div style={{ textAlign:"center", color:"var(--text3)" }}>Cargando...</div> :
+            messages.length === 0 ? (
+              <div style={{ textAlign:"center", color:"var(--text3)", padding:40 }}>
+                <div style={{ fontSize:"2rem", marginBottom:8 }}>👋</div>
+                <div>¡Conectaste con {otherNombre}!</div>
+                <div style={{ fontSize:"0.78rem", marginTop:8 }}>Envíale un mensaje para coordinar</div>
+              </div>
+            ) : messages.map((m, i) => (
+              <div key={i} style={{ display:"flex", gap:8, flexDirection: m.from_user_id === myUser.id ? "row-reverse" : "row" }}>
+                <Avatar name={m.from_user_name} color={randomColor(m.from_user_name)} size={30} imageUrl={m.from_avatar_url} />
+                <div style={{ maxWidth:"70%" }}>
+                  <div style={{ background: m.from_user_id === myUser.id ? "rgba(78,205,196,0.2)" : "var(--card2)", borderRadius:10, padding:"8px 12px" }}>
+                    <div style={{ fontSize:"0.85rem", color:"var(--text)", lineHeight:1.5 }}>{m.content}</div>
+                  </div>
+                  <div style={{ fontSize:"0.68rem", color:"var(--text3)", marginTop:3, textAlign: m.from_user_id === myUser.id ? "right" : "left" }}>{timeAgo(m.created_at)}</div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+        <div style={{ padding:"12px 16px", borderTop:"1px solid var(--border)", display:"flex", gap:8 }}>
+          <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key==="Enter" && sendMessage()}
+            placeholder={"Mensaje a " + otherNombre + "..."}
+            style={{ flex:1, padding:"9px 12px", background:"var(--navy3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.85rem", outline:"none", fontFamily:"DM Sans" }} />
+          <button onClick={sendMessage} style={{ padding:"9px 16px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, cursor:"pointer" }}>→</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
 function NotificationsPanel({ user, onClose }) {
