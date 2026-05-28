@@ -1576,70 +1576,72 @@ function DirectMessageChat({ myUser, otherUser, onClose }) {
 function LandingPage({ onEnter }) {
   const features = [
     { icon:"🗺️", title:"Descubre Lima", text:"Tours, eventos y actividades para conocer la ciudad con otros estudiantes" },
-    { icon:"🤝", title:"Encuentra Buddies", text:"Conecta con limeños que te ayudarán a adaptarte y con otros que llegan como tú" },
+    { icon:"🤝", title:"Encuentra Buddies", text:"Conecta con limeños que te ayudarán a adaptarte" },
     { icon:"🛒", title:"Mercado Universitario", text:"Compra y vende entre estudiantes de forma segura" },
-    { icon:"🎉", title:"Eventos y Actividades", text:"Participa en eventos culturales, deportivos y sociales organizados por la comunidad" },
-    { icon:"💬", title:"Comunidad Segura", text:"Solo estudiantes verificados con correo institucional o aprobación del administrador" },
-    { icon:"📍", title:"Para Provincia y Extranjeros", text:"Si llegas desde lejos, encontrarás apoyo de estudiantes que ya conocen Lima" },
+    { icon:"🎉", title:"Eventos y Actividades", text:"Participa en eventos culturales y sociales" },
+    { icon:"💬", title:"Comunidad Segura", text:"Solo estudiantes verificados con correo institucional" },
+    { icon:"📍", title:"Para Provincia y Extranjeros", text:"Si llegas desde lejos, encontrarás apoyo aquí" },
   ];
 
+  const S = {
+    root: { minHeight:"100vh", background:"#0F1B2D", fontFamily:"DM Sans, sans-serif", color:"#F0F4FF" },
+    nav: { position:"fixed", top:0, left:0, right:0, zIndex:100, padding:"0 24px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(15,27,45,0.95)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(255,255,255,0.07)" },
+    logo: { fontFamily:"Outfit, sans-serif", fontWeight:800, fontSize:"1.4rem", background:"linear-gradient(135deg,#4ECDC4,#FF6B6B)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" },
+    hero: { minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"100px 24px 60px", textAlign:"center",
+      background:"radial-gradient(ellipse at 20% 50%, rgba(78,205,196,0.15) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(255,107,107,0.12) 0%, transparent 50%), #0F1B2D" },
+    badge: { display:"inline-flex", alignItems:"center", gap:8, background:"rgba(78,205,196,0.1)", border:"1px solid rgba(78,205,196,0.25)", borderRadius:20, padding:"6px 16px", fontSize:"0.82rem", color:"#4ECDC4", marginBottom:24 },
+    title: { fontFamily:"Outfit, sans-serif", fontWeight:800, fontSize:"clamp(2rem,6vw,3.5rem)", color:"#F0F4FF", lineHeight:1.15, marginBottom:16 },
+    titleSpan: { background:"linear-gradient(135deg,#4ECDC4,#FF6B6B)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" },
+    sub: { fontSize:"clamp(0.95rem,2.5vw,1.1rem)", color:"#94A3C0", maxWidth:520, lineHeight:1.7, marginBottom:36 },
+    btnMain: { padding:"14px 32px", background:"linear-gradient(135deg,#4ECDC4,#38b2ac)", border:"none", borderRadius:12, color:"#0F1B2D", fontFamily:"Outfit, sans-serif", fontWeight:800, fontSize:"1rem", cursor:"pointer" },
+    btnSec: { padding:"14px 32px", background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, color:"#F0F4FF", fontFamily:"DM Sans, sans-serif", fontSize:"1rem", cursor:"pointer" },
+    statsRow: { display:"flex", gap:32, justifyContent:"center", flexWrap:"wrap", marginBottom:40 },
+    cta: { display:"flex", gap:12, flexWrap:"wrap", justifyContent:"center", marginBottom:60 },
+    grid: { display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:14, maxWidth:780, width:"100%", marginBottom:48 },
+    card: { background:"rgba(26,40,64,0.9)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"18px 16px", textAlign:"left" },
+    cardIcon: { fontSize:"1.6rem", marginBottom:8 },
+    cardTitle: { fontFamily:"Outfit, sans-serif", fontWeight:700, fontSize:"0.9rem", color:"#F0F4FF", marginBottom:5 },
+    cardText: { fontSize:"0.78rem", color:"#5B6E8A", lineHeight:1.5 },
+    provinceBox: { background:"rgba(78,205,196,0.07)", border:"1px solid rgba(78,205,196,0.2)", borderRadius:16, padding:24, maxWidth:480, textAlign:"center" },
+  };
+
   return (
-    <div className="landing-root">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap');
-      `}</style>
-      
-      {/* Navbar */}
-      <nav style={{ position:"fixed", top:0, left:0, right:0, zIndex:100, padding:"0 24px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(15,27,45,0.9)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
-        <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1.4rem", background:"linear-gradient(135deg,#4ECDC4,#FF6B6B)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Help U</div>
-        <button onClick={onEnter} className="landing-btn-main" style={{ padding:"8px 20px", fontSize:"0.88rem" }}>Ingresar →</button>
+    <div style={S.root}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');`}</style>
+      <nav style={S.nav}>
+        <div style={S.logo}>Help U</div>
+        <button onClick={onEnter} style={S.btnMain}>Ingresar →</button>
       </nav>
-
-      {/* Hero */}
-      <div className="landing-hero" style={{ paddingTop:80 }}>
-        <div className="landing-badge">🎓 Solo para estudiantes universitarios en Lima</div>
-        <h1 className="landing-title">
-          Tu comunidad segura<br />en <span>Lima</span>
-        </h1>
-        <p className="landing-sub">
-          ¿Llegaste a Lima a estudiar? Help U te conecta con otros estudiantes para que no estés solo. Encuentra Buddies, descubre la ciudad y adáptate más rápido.
-        </p>
-        
-        {/* Stats */}
-        <div className="landing-stats">
-          {[["🏫", "Universidades e institutos"],["🤝","Buddies conectados"],["🎉","Eventos organizados"]].map(([icon, lbl], i) => (
+      <div style={S.hero}>
+        <div style={S.badge}>🎓 Solo para estudiantes universitarios en Lima</div>
+        <h1 style={S.title}>Tu comunidad segura<br />en <span style={S.titleSpan}>Lima</span></h1>
+        <p style={S.sub}>¿Llegaste a Lima a estudiar? Help U te conecta con otros estudiantes para que no estés solo. Encuentra Buddies, descubre la ciudad y adáptate más rápido.</p>
+        <div style={S.statsRow}>
+          {[["🏫","Universidades"],["🤝","Buddies"],["🎉","Eventos"]].map(([icon,lbl],i) => (
             <div key={i} style={{ textAlign:"center" }}>
-              <div style={{ fontSize:"1.5rem", marginBottom:4 }}>{icon}</div>
-              <div className="landing-stat-lbl">{lbl}</div>
+              <div style={{ fontSize:"1.8rem", marginBottom:4 }}>{icon}</div>
+              <div style={{ fontSize:"0.78rem", color:"#5B6E8A" }}>{lbl}</div>
             </div>
           ))}
         </div>
-
-        <div className="landing-cta">
-          <button className="landing-btn-main" onClick={onEnter}>🚀 Unirme a Help U</button>
-          <button className="landing-btn-sec" onClick={onEnter}>Ya tengo cuenta →</button>
+        <div style={S.cta}>
+          <button style={S.btnMain} onClick={onEnter}>🚀 Unirme a Help U</button>
+          <button style={S.btnSec} onClick={onEnter}>Ya tengo cuenta →</button>
         </div>
-
-        {/* Features */}
-        <div className="landing-features">
-          {features.map((f, i) => (
-            <div className="landing-feature" key={i}>
-              <div className="landing-feature-icon">{f.icon}</div>
-              <div className="landing-feature-title">{f.title}</div>
-              <div className="landing-feature-text">{f.text}</div>
+        <div style={S.grid}>
+          {features.map((f,i) => (
+            <div key={i} style={S.card}>
+              <div style={S.cardIcon}>{f.icon}</div>
+              <div style={S.cardTitle}>{f.title}</div>
+              <div style={S.cardText}>{f.text}</div>
             </div>
           ))}
         </div>
-
-        <div style={{ marginTop:48, padding:"24px", background:"rgba(78,205,196,0.08)", border:"1px solid rgba(78,205,196,0.15)", borderRadius:16, maxWidth:500, textAlign:"center" }}>
-          <div style={{ fontSize:"1.5rem", marginBottom:8 }}>🌍</div>
-          <div style={{ fontFamily:"Outfit", fontWeight:700, fontSize:"1rem", color:"var(--text)", marginBottom:6 }}>¿Vienes de provincia o del extranjero?</div>
-          <div style={{ fontSize:"0.85rem", color:"var(--text2)", lineHeight:1.6 }}>Help U tiene una red de estudiantes limeños dispuestos a ayudarte a conocer la ciudad, entender la cultura y adaptarte a tu nueva vida universitaria.</div>
-        </div>
-
-        <div className="landing-scroll">
-          <span>↓</span>
-          <span>Únete gratis</span>
+        <div style={S.provinceBox}>
+          <div style={{ fontSize:"2rem", marginBottom:10 }}>🌍</div>
+          <div style={{ fontFamily:"Outfit, sans-serif", fontWeight:700, fontSize:"1rem", color:"#F0F4FF", marginBottom:8 }}>¿Vienes de provincia o del extranjero?</div>
+          <div style={{ fontSize:"0.85rem", color:"#94A3C0", lineHeight:1.6 }}>Help U tiene una red de estudiantes limeños dispuestos a ayudarte a conocer la ciudad, entender la cultura y adaptarte a tu nueva vida universitaria.</div>
+          <button style={{ ...S.btnMain, marginTop:16, width:"100%" }} onClick={onEnter}>Encontrar mi Buddy →</button>
         </div>
       </div>
     </div>
