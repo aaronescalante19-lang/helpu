@@ -458,10 +458,24 @@ function PostCard({ post, user, onUpdate }) {
   const [newComment, setNewComment] = useState("");
   const nombre = user?.user_metadata?.nombre || user?.email?.split("@")[0] || "Usuario";
 
+  useEffect(() => {
+    async function checkLike() {
+      const { data } = await supabase.from("post_likes").select("id").eq("post_id", post.id).eq("user_id", user.id).single();
+      setLiked(!!data);
+    }
+    if (user?.id) checkLike();
+  }, [post.id, user?.id]);
+
   async function handleLike() {
-    const newLikes = liked ? Math.max(0, likes - 1) : likes + 1;
-    setLiked(!liked); setLikes(newLikes);
-    await supabase.from("posts").update({ likes: newLikes }).eq("id", post.id);
+    if (liked) {
+      setLiked(false); setLikes(l => Math.max(0, l - 1));
+      await supabase.from("post_likes").delete().eq("post_id", post.id).eq("user_id", user.id);
+      await supabase.from("posts").update({ likes: Math.max(0, likes - 1) }).eq("id", post.id);
+    } else {
+      setLiked(true); setLikes(l => l + 1);
+      await supabase.from("post_likes").insert({ post_id: post.id, user_id: user.id });
+      await supabase.from("posts").update({ likes: likes + 1 }).eq("id", post.id);
+    }
   }
 
   async function sendComment() {
