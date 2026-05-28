@@ -324,6 +324,7 @@ function LoginScreen({ onLogin }) {
   const [carnet, setCarnet] = useState("");
   const [nombre, setNombre] = useState("");
   const [uni, setUni] = useState("");
+  const [origen, setOrigen] = useState("provincia");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -341,14 +342,14 @@ function LoginScreen({ onLogin }) {
         if (!carnet || carnet.length < 6) throw new Error(esInstitucional ? "El carnet debe tener al menos 6 dígitos" : "El DNI debe tener 8 dígitos");
         const status = esInstitucional ? "aprobado" : "pendiente";
         const { data, error } = await supabase.auth.signUp({ email, password,
-          options: { data: { nombre, carnet, universidad: uni } }
+          options: { data: { nombre, carnet, universidad: uni, origen } }
         });
         if (error) throw error;
         if (data.user) {
           await supabase.from("profiles").upsert({
             user_id: data.user.id, nombre, universidad: uni,
             carnet, dni: carnet, tipo_correo: esInstitucional ? "institucional" : "personal",
-            status
+            status, ciudad: origen
           });
         }
         if (data.user && !data.session) {
@@ -383,6 +384,15 @@ function LoginScreen({ onLogin }) {
             <input className="login-input" placeholder="Ej: PUCP, UPC, TECSUP..." value={uni} onChange={e => setUni(e.target.value)} />
             <label className="login-label">DNI o N° de Carnet Universitario</label>
             <input className="login-input" placeholder="Ej: 12345678 o 20230142" value={carnet} onChange={e => setCarnet(e.target.value)} />
+            <label className="login-label">¿De dónde vienes?</label>
+            <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+              {[["🏙️","Soy de Lima","lima"],["🗺️","Vengo de provincia","provincia"],["🌍","Soy extranjero","extranjero"]].map(([icon, label, val]) => (
+                <button key={val} type="button" onClick={() => setOrigen(val)} style={{ flex:1, minWidth:90, padding:"10px 8px", borderRadius:10, border:"2px solid", borderColor: origen===val ? "#4ECDC4" : "rgba(255,255,255,0.07)", background: origen===val ? "rgba(78,205,196,0.15)" : "transparent", color: origen===val ? "#4ECDC4" : "#94A3C0", cursor:"pointer", fontSize:"0.82rem", fontWeight: origen===val ? 700 : 400, transition:"all 0.2s" }}>
+                  <div style={{ fontSize:"1.2rem", marginBottom:3 }}>{icon}</div>
+                  {label}
+                </button>
+              ))}
+            </div>
             {!email.includes(".edu") && email.includes("@") && <div style={{ fontSize:"0.75rem", color:"var(--amber)", background:"rgba(255,179,71,0.1)", padding:"8px 12px", borderRadius:8, marginBottom:8 }}>⏳ Con correo personal tu cuenta será revisada por el administrador antes de activarse.</div>}
           </>
         )}
@@ -983,7 +993,22 @@ function BuddiesView({ user }) {
   const buddy = profiles[idx % profiles.length];
   const nombre = buddy.nombre || buddy.email?.split("@")[0] || "Estudiante";
   const color = randomColor(nombre);
-  const match = 70 + (nombre.length * 3 % 28);
+  function calcMatch(b) {
+    let score = 60;
+    const myOrigen = user?.user_metadata?.origen || "lima";
+    const buddyOrigen = b.ciudad || "provincia";
+    // Lima + provincia = high compatibility (that's the point!)
+    if ((myOrigen === "lima" && buddyOrigen !== "lima") || (myOrigen !== "lima" && buddyOrigen === "lima")) score += 20;
+    // Same interests
+    const myInterests = [];
+    const buddyInterests = b.intereses ? b.intereses.split(",").map(i => i.trim()) : [];
+    const common = myInterests.filter(i => buddyInterests.includes(i)).length;
+    score += common * 5;
+    // Same university = less compatible (want to meet new people)
+    if (b.universidad && b.universidad === user?.user_metadata?.universidad) score -= 5;
+    return Math.min(99, Math.max(60, score));
+  }
+  const match = calcMatch(buddy);
 
   return (
     <div className="buddies-full">
