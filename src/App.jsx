@@ -14,6 +14,33 @@ const css = `
   }
   body { background: var(--navy); color: var(--text); font-family: 'DM Sans', sans-serif; }
 
+  /* LANDING */
+  .landing-root { min-height:100vh; display:flex; flex-direction:column; background:var(--navy); overflow:hidden; }
+  .landing-hero { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 24px; text-align:center; position:relative;
+    background: radial-gradient(ellipse at 20% 50%, rgba(78,205,196,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, rgba(255,107,107,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 60% 80%, rgba(167,139,250,0.1) 0%, transparent 50%), var(--navy); }
+  .landing-badge { display:inline-flex; align-items:center; gap:8px; background:rgba(78,205,196,0.1); border:1px solid rgba(78,205,196,0.25); border-radius:20px; padding:6px 16px; font-size:0.82rem; color:var(--mint); margin-bottom:24px; }
+  .landing-title { font-family:'Outfit',sans-serif; font-weight:800; font-size:clamp(2rem,6vw,3.5rem); color:var(--text); line-height:1.15; margin-bottom:16px; }
+  .landing-title span { background:linear-gradient(135deg,var(--mint),var(--coral)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .landing-sub { font-size:clamp(0.95rem,2.5vw,1.15rem); color:var(--text2); max-width:540px; line-height:1.7; margin-bottom:36px; }
+  .landing-cta { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-bottom:60px; }
+  .landing-btn-main { padding:14px 32px; background:linear-gradient(135deg,var(--mint),#38b2ac); border:none; border-radius:12px; color:var(--navy); font-family:'Outfit',sans-serif; font-weight:800; font-size:1rem; cursor:pointer; transition:all 0.2s; }
+  .landing-btn-main:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(78,205,196,0.35); }
+  .landing-btn-sec { padding:14px 32px; background:transparent; border:1px solid var(--border); border-radius:12px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:1rem; cursor:pointer; transition:all 0.2s; }
+  .landing-btn-sec:hover { background:var(--card); }
+  .landing-features { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; max-width:800px; width:100%; margin:0 auto; }
+  .landing-feature { background:rgba(26,40,64,0.8); border:1px solid var(--border); border-radius:16px; padding:20px; text-align:left; }
+  .landing-feature-icon { font-size:1.8rem; margin-bottom:10px; }
+  .landing-feature-title { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:6px; }
+  .landing-feature-text { font-size:0.82rem; color:var(--text3); line-height:1.5; }
+  .landing-stats { display:flex; gap:32px; justify-content:center; flex-wrap:wrap; margin-bottom:48px; }
+  .landing-stat-val { font-family:'Outfit',sans-serif; font-weight:800; font-size:1.8rem; color:var(--text); }
+  .landing-stat-lbl { font-size:0.78rem; color:var(--text3); }
+  .landing-scroll { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); color:var(--text3); font-size:0.78rem; display:flex; flex-direction:column; align-items:center; gap:6px; animation:bounce 2s infinite; }
+  @keyframes bounce { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(6px)} }
+  @media(max-width:600px){ .landing-features{grid-template-columns:1fr 1fr} .landing-stats{gap:20px} }
+
   /* MOBILE NAV */
   .mobile-nav {
     display: none;
@@ -1229,6 +1256,7 @@ function Sidebar({ user, onViewBuddies, onViewEventos, onOpenChat }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showLanding, setShowLanding] = useState(() => !localStorage.getItem("helpu_visited"));
   const [tab, setTab] = useState("muro");
   const [toast, setToast] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1296,7 +1324,10 @@ export default function App() {
 
   if (loading) return <><style>{css}</style><div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text3)" }}>Cargando...</div></>;
 
-  if (!user) return <><style>{css}</style><LoginScreen onLogin={() => supabase.auth.getSession().then(({ data }) => setUser(data.session?.user))} /></>;
+  if (!user) {
+    if (showLanding) return <LandingPage onEnter={() => { localStorage.setItem("helpu_visited", "1"); setShowLanding(false); }} />;
+    return <><style>{css}</style><LoginScreen onLogin={() => supabase.auth.getSession().then(({ data }) => setUser(data.session?.user))} /></>;
+  }
 
   const nombre = user.user_metadata?.nombre || user.email?.split("@")[0] || "U";
   const navLinks = [{ id:"muro", label:"Muro" }, { id:"mercado", label:"Mercado" }, { id:"eventos", label:"Eventos" }, { id:"buddies", label:"Comunidad" }];
@@ -1534,6 +1565,81 @@ function DirectMessageChat({ myUser, otherUser, onClose }) {
               <button onClick={sendMessage} style={{ padding:"9px 16px", background:"linear-gradient(135deg,var(--mint),#38b2ac)", border:"none", borderRadius:8, color:"var(--navy)", fontWeight:700, cursor:"pointer" }}>→</button>
             </>
           ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── LANDING PAGE ─────────────────────────────────────────────────────────────
+function LandingPage({ onEnter }) {
+  const features = [
+    { icon:"🗺️", title:"Descubre Lima", text:"Tours, eventos y actividades para conocer la ciudad con otros estudiantes" },
+    { icon:"🤝", title:"Encuentra Buddies", text:"Conecta con limeños que te ayudarán a adaptarte y con otros que llegan como tú" },
+    { icon:"🛒", title:"Mercado Universitario", text:"Compra y vende entre estudiantes de forma segura" },
+    { icon:"🎉", title:"Eventos y Actividades", text:"Participa en eventos culturales, deportivos y sociales organizados por la comunidad" },
+    { icon:"💬", title:"Comunidad Segura", text:"Solo estudiantes verificados con correo institucional o aprobación del administrador" },
+    { icon:"📍", title:"Para Provincia y Extranjeros", text:"Si llegas desde lejos, encontrarás apoyo de estudiantes que ya conocen Lima" },
+  ];
+
+  return (
+    <div className="landing-root">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap');
+      `}</style>
+      
+      {/* Navbar */}
+      <nav style={{ position:"fixed", top:0, left:0, right:0, zIndex:100, padding:"0 24px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(15,27,45,0.9)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ fontFamily:"Outfit", fontWeight:800, fontSize:"1.4rem", background:"linear-gradient(135deg,#4ECDC4,#FF6B6B)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Help U</div>
+        <button onClick={onEnter} className="landing-btn-main" style={{ padding:"8px 20px", fontSize:"0.88rem" }}>Ingresar →</button>
+      </nav>
+
+      {/* Hero */}
+      <div className="landing-hero" style={{ paddingTop:80 }}>
+        <div className="landing-badge">🎓 Solo para estudiantes universitarios en Lima</div>
+        <h1 className="landing-title">
+          Tu comunidad segura<br />en <span>Lima</span>
+        </h1>
+        <p className="landing-sub">
+          ¿Llegaste a Lima a estudiar? Help U te conecta con otros estudiantes para que no estés solo. Encuentra Buddies, descubre la ciudad y adáptate más rápido.
+        </p>
+        
+        {/* Stats */}
+        <div className="landing-stats">
+          {[["🏫", "Universidades e institutos"],["🤝","Buddies conectados"],["🎉","Eventos organizados"]].map(([icon, lbl], i) => (
+            <div key={i} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:"1.5rem", marginBottom:4 }}>{icon}</div>
+              <div className="landing-stat-lbl">{lbl}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="landing-cta">
+          <button className="landing-btn-main" onClick={onEnter}>🚀 Unirme a Help U</button>
+          <button className="landing-btn-sec" onClick={onEnter}>Ya tengo cuenta →</button>
+        </div>
+
+        {/* Features */}
+        <div className="landing-features">
+          {features.map((f, i) => (
+            <div className="landing-feature" key={i}>
+              <div className="landing-feature-icon">{f.icon}</div>
+              <div className="landing-feature-title">{f.title}</div>
+              <div className="landing-feature-text">{f.text}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop:48, padding:"24px", background:"rgba(78,205,196,0.08)", border:"1px solid rgba(78,205,196,0.15)", borderRadius:16, maxWidth:500, textAlign:"center" }}>
+          <div style={{ fontSize:"1.5rem", marginBottom:8 }}>🌍</div>
+          <div style={{ fontFamily:"Outfit", fontWeight:700, fontSize:"1rem", color:"var(--text)", marginBottom:6 }}>¿Vienes de provincia o del extranjero?</div>
+          <div style={{ fontSize:"0.85rem", color:"var(--text2)", lineHeight:1.6 }}>Help U tiene una red de estudiantes limeños dispuestos a ayudarte a conocer la ciudad, entender la cultura y adaptarte a tu nueva vida universitaria.</div>
+        </div>
+
+        <div className="landing-scroll">
+          <span>↓</span>
+          <span>Únete gratis</span>
         </div>
       </div>
     </div>
