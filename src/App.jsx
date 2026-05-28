@@ -325,6 +325,7 @@ function LoginScreen({ onLogin }) {
   const [nombre, setNombre] = useState("");
   const [uni, setUni] = useState("");
   const [origen, setOrigen] = useState("provincia");
+  const [ciudadOrigen, setCiudadOrigen] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -342,14 +343,14 @@ function LoginScreen({ onLogin }) {
         if (!carnet || carnet.length < 6) throw new Error(esInstitucional ? "El carnet debe tener al menos 6 dígitos" : "El DNI debe tener 8 dígitos");
         const status = esInstitucional ? "aprobado" : "pendiente";
         const { data, error } = await supabase.auth.signUp({ email, password,
-          options: { data: { nombre, carnet, universidad: uni, origen } }
+          options: { data: { nombre, carnet, universidad: uni, origen, ciudadOrigen } }
         });
         if (error) throw error;
         if (data.user) {
           await supabase.from("profiles").upsert({
             user_id: data.user.id, nombre, universidad: uni,
             carnet, dni: carnet, tipo_correo: esInstitucional ? "institucional" : "personal",
-            status, ciudad: origen
+            status, ciudad: ciudadOrigen || origen, origen
           });
         }
         if (data.user && !data.session) {
@@ -393,6 +394,12 @@ function LoginScreen({ onLogin }) {
                 </button>
               ))}
             </div>
+            {origen !== "lima" && (
+              <>
+                <label className="login-label">{origen === "extranjero" ? "¿De qué país vienes?" : "¿De qué ciudad vienes?"}</label>
+                <input className="login-input" placeholder={origen === "extranjero" ? "Ej: Colombia, Argentina..." : "Ej: Arequipa, Cusco, Trujillo..."} value={ciudadOrigen} onChange={e => setCiudadOrigen(e.target.value)} />
+              </>
+            )}
             {!email.includes(".edu") && email.includes("@") && <div style={{ fontSize:"0.75rem", color:"var(--amber)", background:"rgba(255,179,71,0.1)", padding:"8px 12px", borderRadius:8, marginBottom:8 }}>⏳ Con correo personal tu cuenta será revisada por el administrador antes de activarse.</div>}
           </>
         )}
